@@ -362,3 +362,54 @@ table.data-table tr:hover td { background: #f8fafc; }
 ::-webkit-scrollbar-track { background: #f1f5f9; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ===== 每日行程 · 时间轴 / 行程块 ===== */
+.timeline {
+  position: relative;
+  background:
+    repeating-linear-gradient(to bottom, #f8fafc 0, #f8fafc 43px, #eef2f7 43px, #eef2f7 44px);
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.tl-hour { position: relative; height: 44px; }
+.tl-label {
+  position: absolute; left: 4px; top: -0.55em;
+  font-size: 0.62rem; color: #94a3b8; background: #fff; padding: 0 3px; z-index: 2;
+}
+.tl-drop-line {
+  position: absolute; left: 0; right: 0; height: 0;
+  border-top: 2px solid #22d3ee; display: none; pointer-events: none; z-index: 6;
+}
+.tl-block {
+  position: absolute; left: 52px; right: 8px;
+  border-radius: 0.5rem; padding: 5px 9px; overflow: hidden;
+  cursor: grab; box-shadow: 0 1px 3px rgba(0,0,0,.10);
+  border-left: 4px solid #64748b; background: #f8fafc;
+  display: flex; gap: 6px; align-items: stretch;
+}
+.tl-block:active { cursor: grabbing; }
+.tl-block.dragging { opacity: 0.4; }
+.tl-block-bar { width: 3px; border-radius: 2px; background: rgba(0,0,0,.12); flex: none; }
+.tl-block-main { min-width: 0; flex: 1; }
+.tl-block-title {
+  font-weight: 600; font-size: 0.8rem; line-height: 1.15; color: #0f172a;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tl-block-time { font-size: 0.66rem; color: #475569; margin-top: 1px; }
+.tl-flag {
+  display: inline-block; font-size: 0.6rem; background: #fef3c7; color: #92400e;
+  border-radius: 999px; padding: 0 0.35rem; margin-left: 4px; vertical-align: middle;
+}
+.tl-flag-ticket { background: #dcfce7; color: #166534; }
+
+/* 分类配色 */
+.blk-restaurant { background: #fef2f2; border-left-color: #ef4444; }
+.blk-hotel      { background: #faf5ff; border-left-color: #a855f7; }
+.blk-spot       { background: #eff6ff; border-left-color: #3b82f6; }
+.blk-transport  { background: #ecfeff; border-left-color: #06b6d4; }
+.blk-shopping   { background: #fff7ed; border-left-color: #f97316; }
+.blk-other      { background: #f8fafc; border-left-color: #64748b; }
+
+/* 旧版 酒店/餐饮 简述（非时间块） */
+.day-legacy { font-size: 0.8rem; color: #475569; padding: 0.35rem 0.6rem; background: #f8fafc; border: 1px dashed #e2e8f0; border-radius: 0.4rem; }

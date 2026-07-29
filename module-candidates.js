@@ -33,8 +33,9 @@ app.modules.candidates = {
           <button class="btn btn-primary ml-auto" onclick="app.modules.candidates.openForm('')">➕ 新增备选行程</button>
         </div>
         <p class="text-sm text-slate-600 mb-4">
-          把还在犹豫的餐厅、景点、住宿等先记在这里。<strong class="text-sky-700">勾选「加入行程」</strong>即进入板块2「每日行程表」第一天，
-          之后可在板块2里<strong class="text-sky-700">拖拽</strong>调整顺序、换到合适的日期。
+          把还在犹豫的餐厅、景点、住宿等先记在这里，并填好<strong class="text-sky-700">建议时长</strong>。
+          <strong class="text-sky-700">勾选「加入行程」</strong>即进入板块2「每日行程表」时间轴（接在当天最后一段之后），
+          之后可在时间轴上<strong class="text-sky-700">拖动块</strong>改时间、或拖到别的日期。
         </p>
 
         ${cands.length === 0 ? `
@@ -69,6 +70,7 @@ app.modules.candidates = {
             <div class="flex items-center gap-2">
               <strong class="text-slate-800 truncate">${c.name}</strong>
               <span class="${typeBadge}">${c.type || '其他'}</span>
+              ${c.durationH ? `<span class="badge badge-other">${c.durationH}h</span>` : ''}
             </div>
             <div class="text-tiny text-slate-500 mt-0.5 space-y-0.5">
               ${c.address ? `<div>📍 ${c.address}</div>` : ''}
@@ -102,7 +104,7 @@ app.modules.candidates = {
       <div class="form-grid cols-2">
         <div class="form-field">
           <label>名称 <span class="req">*</span></label>
-          <input id="c_name" value="${v.name || ''}" placeholder="如：一兰拉面 新宿店" />
+          <input id="c_name" value="${v.name || ''}" placeholder="如：台北101" />
         </div>
         <div class="form-field">
           <label>类型</label>
@@ -110,9 +112,10 @@ app.modules.candidates = {
             ${types.map(t => `<option ${t === (v.type || '餐厅') ? 'selected' : ''}>${t}</option>`).join('')}
           </select>
         </div>
-        <div class="form-field col-span-full"><label>地址</label><input id="c_addr" value="${v.address || ''}" placeholder="如：東京都新宿区…" /></div>
-        <div class="form-field"><label>营业时间</label><input id="c_hours" value="${v.hours || ''}" placeholder="11:00-22:00" /></div>
-        <div class="form-field"><label>Google Map 链接</label><input id="c_map" value="${v.mapUrl || ''}" placeholder="https://maps.app.goo.gl/..." /></div>
+        <div class="form-field"><label>建议时长(小时)</label><input type="number" id="c_dur" min="0.5" step="0.5" value="${v.durationH || 2}" placeholder="如 2" /></div>
+        <div class="form-field"><label>营业时间</label><input id="c_hours" value="${v.hours || ''}" placeholder="09:00-22:00" /></div>
+        <div class="form-field col-span-full"><label>地址</label><input id="c_addr" value="${v.address || ''}" placeholder="如：信义区…" /></div>
+        <div class="form-field col-span-full"><label>Google Map 链接</label><input id="c_map" value="${v.mapUrl || ''}" placeholder="https://maps.app.goo.gl/..." /></div>
         <div class="form-field col-span-full"><label>图片链接 (URL)</label><input id="c_img" value="${v.image || ''}" placeholder="https://.../photo.jpg" /></div>
         <div class="form-field col-span-full"><label>备注</label><textarea id="c_note" rows="2" placeholder="推荐菜 / 人均 / 预约方式…">${v.note || ''}</textarea></div>
       </div>
@@ -129,6 +132,7 @@ app.modules.candidates = {
     const data = {
       name,
       type: document.getElementById('c_type').value,
+      durationH: Math.max(0.5, parseFloat(document.getElementById('c_dur').value) || 2),
       address: (document.getElementById('c_addr').value || '').trim(),
       hours: (document.getElementById('c_hours').value || '').trim(),
       mapUrl: (document.getElementById('c_map').value || '').trim(),
@@ -177,14 +181,21 @@ app.modules.candidates = {
       return false;
     }
     if (!firstDay.spots) firstDay.spots = [];
+    const TYPE_KEY = { '餐厅': 'restaurant', '景点': 'spot', '住宿': 'hotel', '交通': 'transport', '购物': 'shopping', '其他': 'other' };
+    const durH = c.durationH || 2;
+    const start = app.modules.itinerary.defaultStart(firstDay, durH);
     firstDay.spots.push({
       id: 'sp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      type: TYPE_KEY[c.type] || 'other',
       name: c.name,
+      startTime: start,
+      durationH: durH,
       address: c.address || '',
       hours: c.hours || '',
-      ticket: 0, duration: '', transport: '', transportTime: '', transportCost: 0,
+      ticket: 0, reservation: '', transport: '', transportCost: 0,
       mapUrl: c.mapUrl || '',
       image: c.image || '',
+      note: c.note || '',
       sourceId: c.id
     });
     return true;
