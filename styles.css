@@ -413,3 +413,15 @@ table.data-table tr:hover td { background: #f8fafc; }
 
 /* 旧版 酒店/餐饮 简述（非时间块） */
 .day-legacy { font-size: 0.8rem; color: #475569; padding: 0.35rem 0.6rem; background: #f8fafc; border: 1px dashed #e2e8f0; border-radius: 0.4rem; }
+
+/* ===== 板块6 · 行程地图 ===== */
+.map-view {
+  height: 460px; width: 100%; border-radius: 0.5rem; overflow: hidden;
+  border: 1px solid #e2e8f0; background: #eef2f7;
+}
+.map-fallback {
+  height: 100%; display: flex; align-items: center; justify-content: center;
+  text-align: center; color: #b45309; font-size: 0.85rem; padding: 1rem;
+  background: #fffbeb;
+}
+#mapView .leaflet-container { height: 100%; width: 100%; }

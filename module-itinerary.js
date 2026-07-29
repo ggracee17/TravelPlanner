@@ -9,7 +9,10 @@
 /* ===== 时间轴常量 & 工具（全局，供内联 ondrop 等调用） ===== */
 const ITIN_TL_START = 6;     // 时间轴起点 06:00
 const ITIN_TL_END = 24;      // 时间轴终点 24:00
-const ITIN_HOUR_PX = 44;     // 每小时像素高度
+function itinHourPx() {
+  const z = (typeof app !== 'undefined' && app.state && app.state.itineraryZoom) || 'normal';
+  return z === 'compact' ? 30 : 48;
+}
 
 const ITIN_TYPES = {
   restaurant: { label: '餐厅', cls: 'blk-restaurant' },
@@ -64,6 +67,7 @@ app.modules.itinerary = {
         <div class="card-title">
           <span>🗓️ 板块2 · 每日行程表（时间轴）</span>
           <div class="ml-auto flex gap-2">
+            <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleZoom()">${app.state.itineraryZoom === 'compact' ? '🔍 宽松视图' : '🔍 紧凑视图'}</button>
             <button class="btn btn-warning" onclick="app.modules.itinerary.autoGenDays()">⚡ 按日期自动生成空白日程</button>
             <button class="btn btn-primary" onclick="app.modules.itinerary.addDay()">➕ 手动新增一日</button>
           </div>
@@ -85,13 +89,19 @@ app.modules.itinerary = {
       </div>`;
   },
 
+  toggleZoom() {
+    app.state.itineraryZoom = app.state.itineraryZoom === 'compact' ? 'normal' : 'compact';
+    app.saveState();
+    this.render();
+  },
+
   renderDayCard(day, idx, dest) {
     this.normalizeDay(day);
     const spots = day.spots || [];
     const totalTicket = spots.reduce((s, x) => s + (parseFloat(x.ticket) || 0), 0);
     const hours = [];
     for (let h = ITIN_TL_START; h < ITIN_TL_END; h++) hours.push(h);
-    const tlHeight = (ITIN_TL_END - ITIN_TL_START) * ITIN_HOUR_PX;
+    const tlHeight = (ITIN_TL_END - ITIN_TL_START) * itinHourPx();
 
     return `
       <div class="day-card">
@@ -127,11 +137,11 @@ app.modules.itinerary = {
   /* ===== 单个行程块 ===== */
   renderBlock(s, day) {
     const meta = ITIN_TYPES[s.type] || ITIN_TYPES.other;
-    const maxTop = (ITIN_TL_END - ITIN_TL_START) * ITIN_HOUR_PX - ITIN_HOUR_PX;
-    let top = (itinTimeToNum(s.startTime) - ITIN_TL_START) * ITIN_HOUR_PX;
+    const maxTop = (ITIN_TL_END - ITIN_TL_START) * itinHourPx() - itinHourPx();
+    let top = (itinTimeToNum(s.startTime) - ITIN_TL_START) * itinHourPx();
     top = Math.max(0, Math.min(top, maxTop));
-    let h = Math.max(parseFloat(s.durationH) || 1, 0.5) * ITIN_HOUR_PX;
-    h = Math.min(h, (ITIN_TL_END - ITIN_TL_START) * ITIN_HOUR_PX - top);
+    let h = Math.max(parseFloat(s.durationH) || 1, 0.5) * itinHourPx();
+    h = Math.min(h, (ITIN_TL_END - ITIN_TL_START) * itinHourPx() - top);
     const dur = parseFloat(s.durationH) || 1;
     return `
       <div class="tl-block ${meta.cls}" draggable="true"
@@ -169,10 +179,10 @@ app.modules.itinerary = {
     const tl = e.currentTarget;
     const rect = tl.getBoundingClientRect();
     const y = e.clientY - rect.top;
-    const hour = itinSnap(ITIN_TL_START + y / ITIN_HOUR_PX);
+    const hour = itinSnap(ITIN_TL_START + y / itinHourPx());
     let line = tl.querySelector('.tl-drop-line');
     if (!line) { line = document.createElement('div'); line.className = 'tl-drop-line'; tl.appendChild(line); }
-    line.style.top = ((hour - ITIN_TL_START) * ITIN_HOUR_PX) + 'px';
+    line.style.top = ((hour - ITIN_TL_START) * itinHourPx()) + 'px';
     line.style.display = 'block';
   },
 
@@ -191,7 +201,7 @@ app.modules.itinerary = {
     if (!from) return;
     const rect = tl.getBoundingClientRect();
     const y = e.clientY - rect.top;
-    let hour = itinSnap(ITIN_TL_START + y / ITIN_HOUR_PX);
+    let hour = itinSnap(ITIN_TL_START + y / itinHourPx());
     hour = Math.max(ITIN_TL_START, Math.min(ITIN_TL_END - 0.5, hour));
     this.moveSpotToTime(from.spotId, tl.dataset.dayId, itinNumToTime(hour));
     this._drag = null;
@@ -289,6 +299,8 @@ app.modules.itinerary = {
         <div class="form-field"><label>🔗 Google Map 链接</label><input id="b_map" value="${s.mapUrl || ''}" placeholder="https://maps.app.goo.gl/..." /></div>
         <div class="form-field col-span-full"><label>🖼️ 图片链接 (URL)</label><input id="b_img" value="${s.image || ''}" placeholder="https://.../photo.jpg" /></div>
         <div class="form-field col-span-full"><label>📝 备注</label><textarea id="b_note" rows="2">${s.note || ''}</textarea></div>
+        <div class="form-field"><label>纬度 lat</label><input id="b_lat" value="${s.lat != null ? s.lat : ''}" placeholder="如 25.033" /></div>
+        <div class="form-field"><label>经度 lng</label><input id="b_lng" value="${s.lng != null ? s.lng : ''}" placeholder="如 121.565" /></div>
       </div>
     `, [
       ...(isNew ? [] : [{ text: '删除', class: 'btn btn-danger', action: `app.modules.itinerary.deleteBlock('${dayId}','${spotId}')` }]),
@@ -316,7 +328,9 @@ app.modules.itinerary = {
       hours: (document.getElementById('b_hours').value || '').trim(),
       mapUrl: (document.getElementById('b_map').value || '').trim(),
       image: (document.getElementById('b_img').value || '').trim(),
-      note: (document.getElementById('b_note').value || '').trim()
+      note: (document.getElementById('b_note').value || '').trim(),
+      lat: document.getElementById('b_lat').value ? parseFloat(document.getElementById('b_lat').value) : null,
+      lng: document.getElementById('b_lng').value ? parseFloat(document.getElementById('b_lng').value) : null
     };
     if (spotId) {
       const s = day.spots.find(x => x.id === spotId);

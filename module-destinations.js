@@ -16,7 +16,7 @@ app.modules.home = {
     sec.innerHTML = `
       <div class="card">
         <div class="card-title">🏠 私人旅行工作台 · 总览</div>
-        <p class="text-sm text-slate-600 mb-4">欢迎使用！本工作台永久保存所有行程资料，5 大核心板块结构固定不可删减。
+        <p class="text-sm text-slate-600 mb-4">欢迎使用！本工作台永久保存所有行程资料，6 大核心板块结构固定不可删减。
         <strong class="text-sky-700">左侧目录可随时切换板块</strong>，下方为您的旅行数据总览。</p>
 
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -84,6 +84,7 @@ app.modules.home = {
             <li>• <strong>板块3</strong> 行前核对清单：证件清单 + 行李清单（按气候动态调整）</li>
             <li>• <strong>板块4</strong> 旅行花销记账台账：实时联动总账，超支自动提醒</li>
             <li>• <strong>板块5</strong> 备选行程库：录入备选餐厅 / 景点 / 住宿，勾选加入每日行程，再到板块2拖拽排期</li>
+            <li>• <strong>板块6</strong> 行程地图总览：在地图上标出每日行程地点，可下拉按日期筛选查看</li>
             <li>• 顶部「💾 备份/恢复」可导出 JSON 备份；「📥 一键导出全部 Excel」可生成多 sheet 工作簿</li>
           </ul>
         </div>

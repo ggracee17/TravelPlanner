@@ -339,6 +339,7 @@ const app = {
     if (this.modules.checklists) this.modules.checklists.render();
     if (this.modules.expenses) this.modules.expenses.render();
     if (this.modules.candidates) this.modules.candidates.render();
+    if (this.modules.map) this.modules.map.render();
   },
 
   /* ====== 全局备份/恢复 ====== */
