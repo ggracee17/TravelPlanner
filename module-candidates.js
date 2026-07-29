@@ -1,8 +1,10 @@
 /* ============================================================
-   板块5（精简后）· 备选行程库
-   录入备选行程（餐厅 / 景点 / 住宿…），含 地址、营业时间、
+   板块5（精简后）· 行程库
+   录入可复用行程（餐厅 / 景点 / 住宿…），含 地址、营业时间、
    Google Map 链接、图片；勾选后即时加入当前目的地的「每日行程表」
    第一天，再到板块2 拖拽排序 / 跨日移动，完成精细规划。
+   行程库与板块2行程块共用同一编辑表单，双方改动双向同步。
+   排序规则：未加入行程表的排最前；已加入的按所在日程日期顺序排列。
    ============================================================ */
 
 app.modules.candidates = {
@@ -15,42 +17,63 @@ app.modules.candidates = {
     const cands = app.state.candidates || (app.state.candidates = []);
     const d = app.getActiveDestination();
 
-    // 统计每个备选当前落入的日期（用于勾选态提示）
+    // 统计每个行程库项目当前落入的日期（用于排序与勾选态提示）
     const placedMap = {};
     if (d) {
       const days = (app.state[d.id]?.itinerary || [])
         .slice()
         .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
       days.forEach((day, i) => {
-        (day.spots || []).forEach(s => { if (s.sourceId) placedMap[s.sourceId] = `Day ${i + 1}（${day.date || '?'})`; });
+        (day.spots || []).forEach(s => {
+          if (s.sourceId) placedMap[s.sourceId] = { dayIndex: i, date: day.date, startTime: s.startTime };
+        });
       });
     }
+
+    const sorted = this.sortCandidates(cands, placedMap);
 
     sec.innerHTML = `
       <div class="card">
         <div class="card-title">
-          <span>🧩 板块5 · 备选行程库</span>
-          <button class="btn btn-primary ml-auto" onclick="app.modules.candidates.openForm('')">➕ 新增备选行程</button>
+          <span>🧩 板块5 · 行程库</span>
+          <button class="btn btn-primary ml-auto" onclick="app.modules.itinerary.openTripForm('newcand','')">➕ 新增行程库项目</button>
         </div>
         <p class="text-sm text-slate-600 mb-4">
           把还在犹豫的餐厅、景点、住宿等先记在这里，并填好<strong class="text-sky-700">建议时长</strong>。
           <strong class="text-sky-700">勾选「加入行程」</strong>即进入板块2「每日行程表」时间轴（接在当天最后一段之后），
           之后可在时间轴上<strong class="text-sky-700">拖动块</strong>改时间、或拖到别的日期。
+          下方排序：<strong>未加入行程的排最前</strong>，已加入的按<strong>所在日程日期</strong>顺序排。
+          点「编辑」与板块2使用<strong>同一表单</strong>，两处改动会<strong>双向同步</strong>。
         </p>
 
-        ${cands.length === 0 ? `
+        ${sorted.length === 0 ? `
           <div class="empty-state">
             <div class="icon">🧩</div>
-            <h3>备选行程库还是空的</h3>
-            <p class="text-sm">点击右上角「➕ 新增备选行程」，例如录入 3 家备选餐厅（含地址 / 营业时间 / Google Map 链接 / 图片），勾选心仪的那家即可进入每日行程。</p>
+            <h3>行程库还是空的</h3>
+            <p class="text-sm">点击右上角「➕ 新增行程库项目」，例如录入 3 家备选餐厅（含地址 / 营业时间 / Google Map 链接 / 图片），勾选心仪的那家即可进入每日行程。</p>
           </div>
         ` : `
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            ${cands.map(c => this.renderCard(c, placedMap[c.id])).join('')}
+            ${sorted.map(c => this.renderCard(c, placedMap[c.id])).join('')}
           </div>
         `}
       </div>
     `;
+  },
+
+  /* 排序：未加入→最前；已加入→按日期(dayIndex)再按开始时间 */
+  sortCandidates(cands, placedMap) {
+    return cands.map((c, i) => ({ c, i }))
+      .sort((A, B) => {
+        const pa = placedMap[A.c.id] ? 1 : 0;
+        const pb = placedMap[B.c.id] ? 1 : 0;
+        if (pa !== pb) return pa - pb;           // 未加入(0) 排最前
+        if (!pa) return A.i - B.i;               // 都未加入：保持原顺序
+        const da = placedMap[A.c.id].dayIndex, db = placedMap[B.c.id].dayIndex;
+        if (da !== db) return da - db;           // 按日程日期顺序
+        return itinTimeToNum(placedMap[A.c.id].startTime) - itinTimeToNum(placedMap[B.c.id].startTime);
+      })
+      .map(x => x.c);
   },
 
   renderCard(c, placed) {
@@ -58,6 +81,10 @@ app.modules.candidates = {
       '餐厅': 'badge badge-restaurant', '景点': 'badge badge-spot', '住宿': 'badge badge-hotel',
       '交通': 'badge badge-transport', '购物': 'badge badge-shop', '其他': 'badge badge-other'
     }[c.type] || 'badge badge-other';
+
+    const placedText = placed
+      ? `✅ 已加入 · Day ${placed.dayIndex + 1}（${placed.date || '?'}）${placed.startTime || ''}`
+      : '未加入行程';
 
     return `
       <div class="candidate-card ${c.checked ? 'is-checked' : ''}">
@@ -79,76 +106,15 @@ app.modules.candidates = {
               ${c.note ? `<div class="text-slate-400">📝 ${c.note}</div>` : ''}
             </div>
             <div class="flex items-center gap-3 mt-2">
-              ${c.checked
-                ? `<span class="text-tiny text-emerald-600 font-semibold">✅ 已加入 · ${placed || '板块2'}</span>`
-                : `<span class="text-tiny text-slate-400">未加入行程</span>`}
+              <span class="text-tiny ${placed ? 'text-emerald-600 font-semibold' : 'text-slate-400'}">${placedText}</span>
               <span class="flex-1"></span>
-              <button class="btn btn-ghost btn-sm" onclick="app.modules.candidates.openForm('${c.id}')">✏️ 编辑</button>
+              <button class="btn btn-ghost btn-sm" onclick="app.modules.itinerary.openTripForm('cand','${c.id}')">✏️ 编辑</button>
               <button class="btn btn-danger btn-sm" onclick="app.modules.candidates.deleteCandidate('${c.id}')">🗑️ 删除</button>
             </div>
           </div>
         </div>
       </div>
     `;
-  },
-
-  /* ===== 新增 / 编辑 表单 ===== */
-  openForm(id) {
-    const cands = app.state.candidates || (app.state.candidates = []);
-    const c = id ? cands.find(x => x.id === id) : null;
-    const isEdit = !!c;
-    const v = c || { name: '', type: '餐厅', address: '', hours: '', mapUrl: '', image: '', note: '' };
-    const types = ['餐厅', '景点', '住宿', '交通', '购物', '其他'];
-
-    app.openModal(isEdit ? '✏️ 编辑备选行程' : '➕ 新增备选行程', `
-      <div class="form-grid cols-2">
-        <div class="form-field">
-          <label>名称 <span class="req">*</span></label>
-          <input id="c_name" value="${v.name || ''}" placeholder="如：台北101" />
-        </div>
-        <div class="form-field">
-          <label>类型</label>
-          <select id="c_type">
-            ${types.map(t => `<option ${t === (v.type || '餐厅') ? 'selected' : ''}>${t}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-field"><label>建议时长(小时)</label><input type="number" id="c_dur" min="0.5" step="0.5" value="${v.durationH || 2}" placeholder="如 2" /></div>
-        <div class="form-field"><label>营业时间</label><input id="c_hours" value="${v.hours || ''}" placeholder="09:00-22:00" /></div>
-        <div class="form-field col-span-full"><label>地址</label><input id="c_addr" value="${v.address || ''}" placeholder="如：信义区…" /></div>
-        <div class="form-field col-span-full"><label>Google Map 链接</label><input id="c_map" value="${v.mapUrl || ''}" placeholder="https://maps.app.goo.gl/..." /></div>
-        <div class="form-field col-span-full"><label>图片链接 (URL)</label><input id="c_img" value="${v.image || ''}" placeholder="https://.../photo.jpg" /></div>
-        <div class="form-field col-span-full"><label>备注</label><textarea id="c_note" rows="2" placeholder="推荐菜 / 人均 / 预约方式…">${v.note || ''}</textarea></div>
-      </div>
-    `, [
-      { text: '取消', class: 'btn btn-ghost', action: 'app.closeModal()' },
-      { text: isEdit ? '保存修改' : '添加到备选库', class: 'btn btn-primary', action: `app.modules.candidates.saveForm('${id || ''}')` }
-    ]);
-  },
-
-  saveForm(id) {
-    const name = (document.getElementById('c_name').value || '').trim();
-    if (!name) return app.toast('请填写名称', 'warning');
-    const cands = app.state.candidates || (app.state.candidates = []);
-    const data = {
-      name,
-      type: document.getElementById('c_type').value,
-      durationH: Math.max(0.5, parseFloat(document.getElementById('c_dur').value) || 2),
-      address: (document.getElementById('c_addr').value || '').trim(),
-      hours: (document.getElementById('c_hours').value || '').trim(),
-      mapUrl: (document.getElementById('c_map').value || '').trim(),
-      image: (document.getElementById('c_img').value || '').trim(),
-      note: (document.getElementById('c_note').value || '').trim()
-    };
-    if (id) {
-      const c = cands.find(x => x.id === id);
-      if (c) Object.assign(c, data);
-    } else {
-      cands.push(Object.assign({ id: 'cand_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), checked: false }, data));
-    }
-    app.saveState();
-    app.closeModal();
-    app.renderAll();
-    app.toast('已保存', 'success');
   },
 
   /* ===== 勾选 → 加入 / 移除 每日行程 ===== */
@@ -209,7 +175,7 @@ app.modules.candidates = {
   },
 
   deleteCandidate(id) {
-    if (!confirm('确定删除这条备选行程？')) return;
+    if (!confirm('确定删除这条行程库项目？')) return;
     const cands = app.state.candidates || (app.state.candidates = []);
     const c = cands.find(x => x.id === id);
     if (c && c.checked) this.removeFromItinerary(id);
