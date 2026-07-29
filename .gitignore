@@ -1,0 +1,16 @@
+# 依赖（本项目零运行时依赖，仅防御性忽略）
+node_modules/
+
+# 运行时生成的持久化数据（含密钥/快照），不要入库
+data/
+
+# 日志
+server.log
+*.tmp
+
+# 本项目的工作区记忆/计划，属本地隐私，勿上传
+.workbuddy-ai/
+
+# 系统文件
+.DS_Store
+Thumbs.db

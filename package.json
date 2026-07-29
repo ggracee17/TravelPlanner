@@ -1,0 +1,13 @@
+{
+  "name": "travel-board-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "私人旅行规划工作台 · 全栈后端（单密码保护 + 服务端永久存储 + 多人实时协作），纯 Node 零依赖",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

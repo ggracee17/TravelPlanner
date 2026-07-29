@@ -1,0 +1,12 @@
+# Render.com 一键部署配置（无需 Dockerfile）
+# 用法：把本仓库推到 GitHub → Render 新建 "Web Service" → 关联仓库 → 自动读取此文件
+services:
+  - type: web
+    name: travel-board
+    runtime: node
+    plan: free            # 免费额度，足够家庭出行规划；注意免费版会休眠、且磁盘非持久
+    startCommand: node server.js
+    envVars:
+      - key: BOARD_PASSWORD
+        sync: false       # 部署后在 Render 控制台手动设置你的强密码
+      # PORT 由 Render 自动注入，无需设置

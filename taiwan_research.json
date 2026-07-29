@@ -1,0 +1,71 @@
+[
+  {
+    "title": "台湾·必去景点（2026）",
+    "results": [
+      { "icon": "🏙️", "head": "台北101 + 信义商圈", "body": "地标观景台全票 NT$600（89F），加购101楼另+NT$380；建议傍晚登顶看夜景，周边信义商圈吃喝逛街。", "link": "https://www.mytaiwan.org/" },
+      { "icon": "🏛️", "head": "台北故宫博物院", "body": "中华文化艺术宝库，门票约 NT$150–350（部分特展另计），历史/文创爱好者必去。", "link": "https://www.mytaiwan.org/taiwan-travel-guide/national-palace-museum.html" },
+      { "icon": "⛰️", "head": "九份老街", "body": "怀旧山城+海景小吃街，傍晚灯火最美；阿妹茶楼、《悲情城市》取景地。", "link": "https://www.mytaiwan.org/taiwan-travel-guide/jiufen-old-street.html" },
+      { "icon": "🌊", "head": "日月潭", "body": "台湾最大湖泊，9月中秋前后赏月胜地；可环湖骑行/游船，中南部气候舒适。", "link": "https://you.ctrip.com/sight/taiwan100076.html" },
+      { "icon": "🧗", "head": "太鲁阁国家公园（花莲）", "body": "大理石峡谷步道壮观，属东部多变气候区；建议上午去、留意天气。", "link": "https://www.mytaiwan.org/taiwan-travel-guide/taroko-national-park.html" },
+      { "icon": "🌸", "head": "阳明山 / 清境农场", "body": "9月天气凉爽宜人，适合登高、看羊、泡温泉；山区昼夜温差大需薄外套。", "link": "https://www.kkday.com/zh-my/blog/338/taiwan-must-go" },
+      { "icon": "🏖️", "head": "垦丁（南台湾）", "body": "9月晴朗温暖，适合浮潜/水上活动；与北部温差明显，可安排南进路线。", "link": "https://www.mytaiwan.org/taiwan-travel-guide/" },
+      { "icon": "🏮", "head": "夜市 & 平溪天灯", "body": "饶河/士林（台北）、逢甲（台中）夜市美食集中；平溪线放天灯体验感强，假日人挤建议错峰。", "link": "https://noahgetaways.tw/chapter-1880" }
+    ],
+    "note": "9月山区（阿里山/合欢山）昼夜温差大，夜间可低于18℃注意保暖；台风季出发前关注天气预警，山区行程留弹性。"
+  },
+  {
+    "title": "台湾·必吃美食",
+    "results": [
+      { "icon": "🍚", "head": "卤肉饭", "body": "国民小吃，一碗 NT$30–60，米其林必比登也常推荐。", "link": "" },
+      { "icon": "🍜", "head": "牛肉面", "body": "红烧/清炖，NT$100–180，台北街头到处可见。", "link": "" },
+      { "icon": "🍗", "head": "盐酥鸡", "body": "夜市必点，NT$60–100，配珍奶绝配。", "link": "https://noahgetaways.tw/chapter-1880" },
+      { "icon": "🧋", "head": "珍珠奶茶（手摇饮）", "body": "NT$40–90，当地日常饮品，排队名店众多。", "link": "" },
+      { "icon": "🦪", "head": "蚵仔煎 / 大肠包小肠 / 刈包", "body": "夜市经典组合，NT$60–120，边走边吃。", "link": "https://food-guide.jjpwa.com/taiwan-night-market-food-guide-30-must-eat-2026/" },
+      { "icon": "🥟", "head": "小笼包（鼎泰丰等）", "body": "人均 NT$300–500，正餐厅体验；也可找平价老字号。", "link": "" },
+      { "icon": "🍍", "head": "凤梨酥（伴手礼）", "body": "伴手礼首选，微热山丘/佳德等名店常排队。", "link": "" },
+      { "icon": "💰", "head": "花费参考", "body": "夜市/面摊一餐 NT$60–150 吃饱；便当 NT$100–180；正餐厅 NT$400–800/人。", "link": "" }
+    ],
+    "note": "夜市与小吃摊多为现金交易，备足新台币零钱；想省可超商鲜食+夜市混搭。"
+  },
+  {
+    "title": "台湾·9月天气与穿搭",
+    "results": [
+      { "icon": "🌡️", "head": "整体气温 21–31℃", "body": "夏秋交替，炎热潮湿为主，偶有凉爽日；湿度高、体感闷热。", "link": "https://www.mytaiwan.org/taiwan-weather/taiwan-weather-in-september.html" },
+      { "icon": "🌧️", "head": "北部（台北/基隆/宜兰）", "body": "受东北季风影响，午后常有雷阵雨，日均 24–31℃，早晚凉、中午闷。", "link": "" },
+      { "icon": "☀️", "head": "中南部（台中/南投/高雄/台南）", "body": "以晴朗为主，白天 30–32℃、紫外线强，夜间约 25℃。", "link": "" },
+      { "icon": "🌊", "head": "东部/离岛（花莲/台东/澎湖）", "body": "天气多变偶有风雨，沿海风力稍大；雨后常见彩虹。", "link": "" },
+      { "icon": "🏔️", "head": "高山（阿里山/合欢山）", "body": "昼夜温差大，白天 22–25℃，夜间可降至 18℃ 以下，需保暖层。", "link": "" },
+      { "icon": "🌀", "head": "台风季尾声", "body": "7–9月为台风季，9月仍有风险；午后雷阵雨频繁，随身带伞。", "link": "" },
+      { "icon": "👕", "head": "穿搭建议", "body": "透气轻薄+分层穿搭；薄外套应对空调/傍晚；宽檐帽+墨镜+高倍防晒；去垦丁带泳衣。", "link": "" }
+    ],
+    "note": "9月仍属盛夏尾声，强紫外线+高湿，防晒和补水很重要；台风可能打乱东部/离岛行程。"
+  },
+  {
+    "title": "台湾·自由行避坑",
+    "results": [
+      { "icon": "💱", "head": "换汇陷阱", "body": "机场汇率差，建议提前在国内银行换好，或到市区银行/ATM 取现。", "link": "https://www.toutiao.com/article/7567669875217318426/" },
+      { "icon": "🛂", "head": "证件齐备", "body": "大陆居民需《大通证》+ 入台证 + 签注，务必提前办理，出行前复核有效期。", "link": "https://wenku.baidu.com/tfview/f4767e1e4031b90d6c85ec3a87c24028915f852d.html" },
+      { "icon": "💳", "head": "支付以现金为主", "body": "夜市/传统市场/小店多收现金；大城市餐厅饭店可刷卡/移动支付，随身带现金备用。", "link": "https://post.smzdm.com/p/a82zr9rn/" },
+      { "icon": "📶", "head": "通讯提前备", "body": "落地前线上买好 eSIM/旅游SIM，导航、叫车、查票价都靠它，比机场买方便。", "link": "https://letstaiwan.com/zh/category/esim-internet" },
+      { "icon": "🚄", "head": "交通用悠游卡+高铁早鸟", "body": "办一张悠游卡刷捷运/公车/部分台铁/超商；高铁早鸟票更便宜，机场捷运到台北车站约 NT$150。", "link": "https://letstaiwan.com/zh/taiwan-travel-cost-guide/" },
+      { "icon": "🌀", "head": "台风弹性", "body": "9月台风季，关注中央气象署预警；东部/离岛/山区行程预留改期空间。", "link": "https://www.mytaiwan.org/taiwan-weather/taiwan-weather-in-september.html" },
+      { "icon": "🚫", "head": "防骗", "body": "警惕路边拉客、假免税店、超低价一日游；官网/正规平台购票最稳。", "link": "https://www.365lvtu.com/1745698412645381/" },
+      { "icon": "🏨", "head": "住宿错峰", "body": "周日–周四比周五六便宜；连假/寒暑假旺季务必早订，住捷运站附近性价比高。", "link": "" }
+    ],
+    "note": "大陆居民赴台个人游政策时有调整，出发前以官方最新公告为准；证件与保险建议纸质+邮箱各存一份。"
+  },
+  {
+    "title": "台湾·花费预算参考（NTD ≈ RMB×0.22）",
+    "results": [
+      { "icon": "💵", "head": "每日·中阶舒适", "body": "约 NT$3,000–5,500（≈¥660–1,210）/人/天，含住商旅+餐厅+捷运+门票。", "link": "https://letstaiwan.com/zh/taiwan-travel-cost-guide/" },
+      { "icon": "🎒", "head": "每日·背包客", "body": "约 NT$1,000–1,800（≈¥220–400），青旅+小吃+超商+大众交通。", "link": "" },
+      { "icon": "✨", "head": "每日·轻奢", "body": "NT$8,000+（≈¥1,760+），设计旅店/五星+正餐厅+多趟计程车。", "link": "" },
+      { "icon": "🗓️", "head": "6–7天合计（不含机票）", "body": "中阶约 NT$21,000–38,500（≈¥4,600–8,500），2人同行可摊住宿交通。", "link": "https://www.danglv.com/zhishi/20260614/42742.html" },
+      { "icon": "🏨", "head": "住宿", "body": "青旅 NT$600–1,000；商旅双人 NT$1,800–3,500；设计/五星 NT$5,000+。", "link": "" },
+      { "icon": "🍽️", "head": "餐饮", "body": "小吃/便当 NT$60–180；手摇饮 NT$40–90；餐厅 NT$400–800/人。", "link": "" },
+      { "icon": "🚇", "head": "交通", "body": "机场捷运 NT$150；捷运 NT$20–65；高铁台北→左营约 NT$1,490（早鸟更便宜）。", "link": "" },
+      { "icon": "🎟️", "head": "门票", "body": "多数景点免费（庙宇/老街/步道）；101观景台 NT$600；故宫 NT$150–350；热门线上购票更便宜免排队。", "link": "" }
+    ],
+    "note": "物价相对日韩港亲民；善用悠游卡、夜市、高铁早鸟可明显省钱。以上为估算区间，随季节/汇率/订房浮动。"
+  }
+]

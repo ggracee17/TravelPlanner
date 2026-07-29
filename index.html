@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>私人专属旅行规划一体化工作台</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="utility.css" />
+</head>
+<body class="bg-slate-100">
+
+  <!-- ===== 顶部栏 ===== -->
+  <header class="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 py-2 flex items-center gap-3 flex-wrap">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🧭</span>
+        <div>
+          <h1 class="text-lg font-bold text-slate-800 leading-none">私人旅行规划工作台</h1>
+          <p class="text-tiny text-slate-500">6 大核心板块 · 永久存档 · 服务端存储 / 多人协作</p>
+        </div>
+      </div>
+      <div class="flex-1"></div>
+      <span id="storageStats" class="text-tiny text-slate-500 bg-slate-100 rounded px-2 py-1"></span>
+      <span id="boardStatus" class="text-tiny text-emerald-600 bg-emerald-50 rounded px-2 py-1 hidden"></span>
+      <button class="btn btn-success btn-sm" onclick="app.openBackupDialog()">💾 备份/恢复</button>
+      <button class="btn btn-primary btn-sm" onclick="app.exportAll()">📥 一键导出全部 Excel</button>
+    </div>
+
+    <!-- 当前目的地切换条 -->
+    <div id="destinationSwitcher" class="max-w-7xl mx-auto px-4 pb-2 hidden flex items-center gap-2">
+      <span class="text-sm font-semibold text-slate-700">🎯 当前目的地：</span>
+      <select id="activeDestSelect" class="text-sm border border-slate-300 rounded px-2 py-1" onchange="app.switchDestination(this.value)"></select>
+      <span id="activeDestSummary" class="text-tiny text-slate-500"></span>
+      <div class="flex-1"></div>
+      <button class="btn btn-primary btn-sm" onclick="app.modules.destinations.newDest()">➕ 新目的地</button>
+    </div>
+
+    <!-- 六大板块导航（固定不可删减） -->
+    <nav class="bg-slate-50 border-t border-slate-200">
+      <div id="navTabs" class="max-w-7xl mx-auto px-2 py-1 flex gap-1 overflow-x-auto">
+        <button class="tab-btn active" data-tab="home">🏠 工作台总览</button>
+        <button class="tab-btn" data-tab="destinations">📍 1·目的地档案库</button>
+        <button class="tab-btn" data-tab="itinerary">🗓️ 2·每日行程表</button>
+        <button class="tab-btn" data-tab="checklists">✅ 3·行前核对清单</button>
+        <button class="tab-btn" data-tab="expenses">💰 4·花销记账台账</button>
+        <button class="tab-btn" data-tab="media">🖼️ 5·图文素材归档</button>
+        <button class="tab-btn" data-tab="search">🔍 6·全网检索知识库</button>
+      </div>
+    </nav>
+  </header>
+
+  <!-- ===== 主体 ===== -->
+  <main class="max-w-7xl mx-auto px-4 py-4">
+
+    <section class="section active" data-section="home"></section>
+
+    <section class="section" data-section="destinations"></section>
+
+    <section class="section" data-section="itinerary"></section>
+
+    <section class="section" data-section="checklists"></section>
+
+    <section class="section" data-section="expenses"></section>
+
+    <section class="section" data-section="media"></section>
+
+    <section class="section" data-section="search"></section>
+
+  </main>
+
+  <!-- ===== 模态框 & Toast 容器 ===== -->
+  <div id="modalRoot"></div>
+  <div id="toastRoot" class="fixed top-4 right-4 z-[100] flex flex-col gap-2" style="position:fixed;top:1rem;right:1rem;z-index:200"></div>
+
+  <!-- ===== 脚本：先加载配置，再加载核心 app，再加载各板块模块 ===== -->
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="module-destinations.js"></script>
+  <script src="module-itinerary.js"></script>
+  <script src="module-checklists.js"></script>
+  <script src="module-expenses.js"></script>
+  <script src="module-media.js"></script>
+  <script src="module-search.js"></script>
+  <!-- SheetJS 用于 Excel 导出（弱网/离线时自动降级为 CSV） -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" onerror="window.__xlsxFailed=true"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (window.__xlsxFailed) {
+        console.warn('SheetJS 加载失败，Excel 导出将自动降级为 CSV。');
+      }
+      app.init();
+    });
+  </script>
+</body>
+</html>
