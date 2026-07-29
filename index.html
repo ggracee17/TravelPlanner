@@ -6,6 +6,19 @@
   <title>私人专属旅行规划一体化工作台</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="utility.css" />
+  <script>
+    // 兜底：任何脚本错误都显示在屏幕上，避免“白屏不知所以”
+    window.addEventListener('error', function (e) {
+      var box = document.getElementById('fatal');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'fatal';
+        box.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff;color:#b00;font:13px/1.6 monospace;padding:20px;white-space:pre-wrap;overflow:auto';
+        (document.body || document.documentElement).appendChild(box);
+      }
+      box.textContent += '\n[脚本错误] ' + (e.message || e.error || e) + (e.filename ? (' @ ' + e.filename + ':' + e.lineno) : '');
+    });
+  </script>
 </head>
 <body class="bg-slate-100">
 
@@ -88,7 +101,12 @@
       if (window.__xlsxFailed) {
         console.warn('SheetJS 加载失败，Excel 导出将自动降级为 CSV。');
       }
-      app.init();
+      try {
+        app.init();
+      } catch (e) {
+        var box = document.getElementById('fatal') || document.body;
+        if (box) box.textContent += '\n[init 异常] ' + (e && e.stack ? e.stack : e);
+      }
     });
   </script>
 </body>
