@@ -203,6 +203,7 @@ app.modules.itinerary = {
 
   /* ===== 拖拽：改时间 / 跨日 ===== */
   _drag: null,
+  _pendingCoords: null, // 从地图链接解析出的坐标，保存时写入行程块/行程库
 
   onDragStart(e) {
     const el = e.target.closest && e.target.closest('[data-spot-id]');
@@ -220,6 +221,12 @@ app.modules.itinerary = {
     el.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
     try { e.dataTransfer.setData('text/plain', this._drag.spotId); } catch (_) {}
+    // 隐藏原生拖拽影像，改用「幽灵块 + 对齐线」显示落点，使拖动的模块与对齐线齐平
+    try {
+      const blank = new Image();
+      blank.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      e.dataTransfer.setDragImage(blank, 0, 0);
+    } catch (_) {}
 
     // 拖拽时展开所有时间轴，便于看到全部可放置区域
     const hpx = itinHourPx();
@@ -370,14 +377,22 @@ app.modules.itinerary = {
       <div class="form-field"><label>建议时长(小时)</label><input type="number" id="t_dur" min="0.5" step="0.5" value="${s.durationH || 1}" /></div>
       <div class="form-field col-span-full"><label>地址</label><input id="t_addr" value="${s.address || ''}" /></div>
       <div class="form-field"><label>营业时间</label><input id="t_hours" value="${s.hours || ''}" placeholder="09:00-22:00" /></div>
-      <div class="form-field"><label>🔗 Google Map 链接</label><input id="t_map" value="${s.mapUrl || ''}" placeholder="https://maps.app.goo.gl/..." /></div>
+      <div class="form-field"><label>🔗 Google Map 链接</label><div class="flex gap-2">
+        <input id="t_map" value="${s.mapUrl || ''}" placeholder="https://www.google.com/maps/place/.../@25.03,121.56,15z" class="flex-1" />
+        <button type="button" class="btn btn-ghost btn-sm" onclick="app.modules.itinerary.fetchFromMapLink()">🔄 获取地址/营业时间</button>
+      </div></div>
       <div class="form-field col-span-full"><label>🖼️ 图片链接 (URL)</label><input id="t_img" value="${s.image || ''}" placeholder="https://.../photo.jpg" /></div>
       <div class="form-field col-span-full"><label>📝 备注</label><textarea id="t_note" rows="2">${s.note || ''}</textarea></div>
     `;
   },
 
-  _schedFields(s) {
+  _schedFields(s, opts) {
+    opts = opts || {};
+    const daySel = opts.dayOptions
+      ? `<div class="form-field col-span-full"><label>📅 加入行程表的日期</label><select id="t_day">${opts.dayOptions}</select></div>`
+      : '';
     return `
+      ${daySel}
       <div class="form-field"><label>开始时间</label><input type="time" id="t_start" value="${s.startTime || '09:00'}" /></div>
       <div class="form-field"><label>门票(¥)</label><input type="number" id="t_ticket" min="0" value="${s.ticket || 0}" /></div>
       <div class="form-field"><label>是否需预约</label>
@@ -387,14 +402,14 @@ app.modules.itinerary = {
           <option value="none" ${s.reservation === 'none' ? 'selected' : ''}>无需预约</option>
         </select>
       </div>
-      <div class="form-field"><label>纬度 lat</label><input id="t_lat" value="${s.lat != null ? s.lat : ''}" placeholder="如 25.033" /></div>
-      <div class="form-field"><label>经度 lng</label><input id="t_lng" value="${s.lng != null ? s.lng : ''}" placeholder="如 121.565" /></div>
     `;
   },
 
   openTripForm(mode, a, b) {
+    this._pendingCoords = null;
     const cands = app.state.candidates || (app.state.candidates = []);
     let cand = null, day = null, s = null, isNew = false;
+    let dayOptions = '';
 
     if (mode === 'spot') {
       const d = app.getActiveDestination();
@@ -407,17 +422,43 @@ app.modules.itinerary = {
         : (day.spots || []).find(x => x.id === b);
       if (!s) return;
       if (s.sourceId) cand = cands.find(c => c.id === s.sourceId) || null;
-    } else if (mode === 'cand') {
-      cand = cands.find(x => x.id === a);
-      if (!cand) return;
-      s = {
-        name: cand.name, type: CN_TO_ITIN_KEY[cand.type] || 'other', startTime: '09:00',
-        durationH: cand.durationH || 2, ticket: 0, reservation: '', address: cand.address || '',
-        hours: cand.hours || '', mapUrl: cand.mapUrl || '', image: cand.image || '', note: cand.note || ''
-      };
-    } else if (mode === 'newcand') {
-      s = { name: '', type: 'spot', startTime: '09:00', durationH: 2, ticket: 0, reservation: '', address: '', hours: '', mapUrl: '', image: '', note: '' };
-    } else return;
+    } else {
+      // 行程库编辑 / 新增：与行程表编辑模块一模一样，且可直接选择加入行程表的日期
+      const d = app.getActiveDestination();
+      if (d) {
+        const days = (app.state[d.id]?.itinerary || []).slice().sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+        // 找到当前已加入的实例（用于预填日期/时间/门票）
+        let placed = null, placedDayId = '';
+        for (const dy of days) {
+          const sp = (dy.spots || []).find(sp => sp.sourceId === a);
+          if (sp) { placed = sp; placedDayId = dy.id; break; }
+        }
+        dayOptions = days.map((dy, i) =>
+          `<option value="${dy.id}" ${dy.id === placedDayId ? 'selected' : ''}>Day ${i + 1} · ${dy.date || '未填日期'}</option>`
+        ).join('');
+        if (mode === 'cand') {
+          cand = cands.find(x => x.id === a);
+          if (!cand) return;
+          s = {
+            name: cand.name, type: CN_TO_ITIN_KEY[cand.type] || 'other',
+            startTime: placed ? placed.startTime : '09:00',
+            durationH: cand.durationH || 2, ticket: placed ? placed.ticket : 0, reservation: placed ? placed.reservation : '',
+            address: cand.address || '', hours: cand.hours || '', mapUrl: cand.mapUrl || '', image: cand.image || '', note: cand.note || ''
+          };
+        } else {
+          s = { name: '', type: 'spot', startTime: '09:00', durationH: 2, ticket: 0, reservation: '', address: '', hours: '', mapUrl: '', image: '', note: '' };
+        }
+      } else {
+        // 无目的地时仍允许编辑行程库（仅不提供加入日期）
+        if (mode === 'cand') {
+          cand = cands.find(x => x.id === a);
+          if (!cand) return;
+          s = { name: cand.name, type: CN_TO_ITIN_KEY[cand.type] || 'other', startTime: '09:00', durationH: cand.durationH || 2, ticket: 0, reservation: '', address: cand.address || '', hours: cand.hours || '', mapUrl: cand.mapUrl || '', image: cand.image || '', note: cand.note || '' };
+        } else {
+          s = { name: '', type: 'spot', startTime: '09:00', durationH: 2, ticket: 0, reservation: '', address: '', hours: '', mapUrl: '', image: '', note: '' };
+        }
+      }
+    }
 
     const titleMap = {
       spot: isNew ? '➕ 添加行程块' : '✏️ 编辑行程块',
@@ -426,17 +467,17 @@ app.modules.itinerary = {
     };
 
     let placedNote = '';
-    if (mode === 'cand') {
+    if (mode === 'cand' && cand) {
       const d = app.getActiveDestination();
       if (d) {
         const days = (app.state[d.id]?.itinerary || []).slice().sort((x, y) => (x.date || '').localeCompare(y.date || ''));
         const where = [];
         days.forEach((dy, i) => { (dy.spots || []).forEach(sp => { if (sp.sourceId === cand.id) where.push(`Day ${i + 1}（${dy.date || '?'}）${sp.startTime || ''}`); }); });
-        if (where.length) placedNote = `<p class="text-tiny text-emerald-600 mb-2">已加入每日行程：${where.join('、')}</p>`;
+        if (where.length) placedNote = `<p class="text-tiny text-emerald-600 mb-2">已在行程表：${where.join('、')}</p>`;
       }
     }
 
-    const sched = mode === 'spot' ? this._schedFields(s) : '';
+    const sched = mode === 'spot' ? this._schedFields(s) : this._schedFields(s, { dayOptions });
     app.openModal(titleMap[mode] || '编辑', `
       ${placedNote}
       <div class="form-grid cols-3">
@@ -463,6 +504,7 @@ app.modules.itinerary = {
       image: (document.getElementById('t_img').value || '').trim(),
       note: (document.getElementById('t_note').value || '').trim()
     };
+    const pc = this._pendingCoords;
 
     if (mode === 'spot') {
       const d = app.getActiveDestination();
@@ -473,43 +515,88 @@ app.modules.itinerary = {
       const sched = {
         startTime: document.getElementById('t_start').value || '09:00',
         ticket: parseFloat(document.getElementById('t_ticket').value) || 0,
-        reservation: document.getElementById('t_resv').value,
-        lat: document.getElementById('t_lat').value ? parseFloat(document.getElementById('t_lat').value) : null,
-        lng: document.getElementById('t_lng').value ? parseFloat(document.getElementById('t_lng').value) : null
+        reservation: document.getElementById('t_resv').value
       };
+      let spot;
       if (b) {
-        const s = day.spots.find(x => x.id === b);
-        if (s) Object.assign(s, common, sched);
+        spot = day.spots.find(x => x.id === b);
+        if (!spot) return;
       } else {
-        day.spots.push(Object.assign({ id: 'sp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), sourceId: '' }, common, sched));
+        spot = { id: 'sp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), sourceId: '' };
+        day.spots.push(spot);
+      }
+      // 行程表内容同步到行程库：确保每个行程块都有对应的行程库条目
+      if (!spot.sourceId) {
+        const nc = this._createCandFromCommon(common);
+        (app.state.candidates || (app.state.candidates = [])).push(nc);
+        spot.sourceId = nc.id;
+      } else {
+        const cand = (app.state.candidates || []).find(c => c.id === spot.sourceId);
+        if (cand) this._writeCommonToCand(cand, common);
+      }
+      Object.assign(spot, common, sched);
+      if (pc) {
+        spot.lat = pc.lat; spot.lng = pc.lng;
+        const cand = (app.state.candidates || []).find(c => c.id === spot.sourceId);
+        if (cand) { cand.lat = pc.lat; cand.lng = pc.lng; }
       }
       day.spots.sort((x, y) => itinTimeToNum(x.startTime) - itinTimeToNum(y.startTime));
-      // 同步回行程库（若该块来源于行程库）
-      if (b) {
-        const src = day.spots.find(x => x.id === b);
-        if (src && src.sourceId) {
-          const cand = (app.state.candidates || []).find(c => c.id === src.sourceId);
-          if (cand) this._writeCommonToCand(cand, common);
+    } else {
+      // 行程库编辑 / 新增：与行程表同一套字段，并可直接加入 / 移动到行程表的日期
+      const cands = app.state.candidates || (app.state.candidates = []);
+      let cand;
+      if (mode === 'cand') {
+        cand = cands.find(x => x.id === a);
+        if (!cand) return;
+      } else {
+        cand = { id: 'cand_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), checked: false };
+        cands.push(cand);
+      }
+      this._writeCommonToCand(cand, common);
+      if (pc) { cand.lat = pc.lat; cand.lng = pc.lng; }
+      this.propagateCandToSpots(cand, common); // 同步其它已加入的实例
+
+      const d = app.getActiveDestination();
+      if (d) {
+        const list = app.state[d.id]?.itinerary || [];
+        // 移除本目的地中该行程库的旧实例（实现跨日移动）
+        list.forEach(dy => { if (dy.spots) dy.spots = dy.spots.filter(s => s.sourceId !== cand.id); });
+        const dayId = document.getElementById('t_day') ? document.getElementById('t_day').value : '';
+        const day = list.find(x => x.id === dayId);
+        if (day) {
+          const sched = {
+            startTime: document.getElementById('t_start').value || '09:00',
+            ticket: parseFloat(document.getElementById('t_ticket').value) || 0,
+            reservation: document.getElementById('t_resv').value
+          };
+          const ns = Object.assign({ id: 'sp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), sourceId: cand.id }, common, sched);
+          if (pc) { ns.lat = pc.lat; ns.lng = pc.lng; }
+          if (!day.spots) day.spots = [];
+          day.spots.push(ns);
+          day.spots.sort((x, y) => itinTimeToNum(x.startTime) - itinTimeToNum(y.startTime));
+          cand.checked = true;
         }
       }
-    } else if (mode === 'cand') {
-      const cands = app.state.candidates || (app.state.candidates = []);
-      const cand = cands.find(x => x.id === a);
-      if (!cand) return;
-      this._writeCommonToCand(cand, common);
-      this.propagateCandToSpots(cand, common);
-    } else if (mode === 'newcand') {
-      const cands = app.state.candidates || (app.state.candidates = []);
-      cands.push(Object.assign(
-        { id: 'cand_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), checked: false },
-        common,
-        { type: ITIN_KEY_TO_CN[common.type] || '其他' }
-      ));
     }
     app.saveState();
     app.closeModal();
     app.renderAll();
     app.toast('已保存', 'success');
+  },
+
+  _createCandFromCommon(common) {
+    return {
+      id: 'cand_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      checked: true,
+      name: common.name,
+      type: ITIN_KEY_TO_CN[common.type] || '其他',
+      durationH: common.durationH,
+      address: common.address,
+      hours: common.hours,
+      mapUrl: common.mapUrl,
+      image: common.image,
+      note: common.note
+    };
   },
 
   _writeCommonToCand(cand, common) {
@@ -534,6 +621,71 @@ app.modules.itinerary = {
       const list = app.state[dest.id]?.itinerary || [];
       list.forEach(day => { (day.spots || []).forEach(s => { if (s.sourceId === cand.id) Object.assign(s, fields); }); });
     });
+  },
+
+  /* ===== Google Map 链接 → 自动获取地址 / 营业时间 ===== */
+  _setField(id, val) { const el = document.getElementById(id); if (el) el.value = val || ''; },
+
+  // 从 Google Maps 链接解析坐标或地点名（短链接 goo.gl/maps.app.goo.gl 浏览器端无法解析，需完整链接）
+  parseMapLink(url) {
+    if (!url) return null;
+    let m = url.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+    if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+    m = url.match(/[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+    if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+    m = url.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+    if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+    m = url.match(/\/place\/([^/@?]+)/);
+    if (m) return { name: decodeURIComponent(m[1]).replace(/\+/g, ' ').trim() };
+    return null;
+  },
+
+  // OpenStreetMap Nominatim 反向地理编码（免 Key；返回地址 + 营业时间若 OSM 有数据）
+  reverseGeocode(lat, lng) {
+    const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' + lat + '&lon=' + lng + '&accept-language=zh-CN';
+    return fetch(url, { headers: { 'Accept': 'application/json' } })
+      .then(r => r.json())
+      .then(d => {
+        if (!d || d.error) return null;
+        return {
+          address: d.display_name || '',
+          hours: (d.extratags && d.extratags.opening_hours) ? d.extratags.opening_hours : ''
+        };
+      })
+      .catch(() => null);
+  },
+
+  async fetchFromMapLink() {
+    const url = ((document.getElementById('t_map') && document.getElementById('t_map').value) || '').trim();
+    if (!url) return app.toast('请先粘贴 Google Map 链接', 'warning');
+    const parsed = this.parseMapLink(url);
+    if (!parsed) return app.toast('无法解析该链接（短链接 maps.app.goo.gl 暂不支持，请粘贴含 @坐标 或 /place/名称 的完整链接）', 'warning');
+    app.toast('正在根据地图链接获取地址…', 'success');
+    try {
+      let coords = null;
+      if (parsed.lat != null) {
+        coords = { lat: parsed.lat, lng: parsed.lng };
+        const rev = await this.reverseGeocode(coords.lat, coords.lng);
+        if (rev) {
+          if (rev.address) this._setField('t_addr', rev.address);
+          if (rev.hours) this._setField('t_hours', rev.hours);
+        }
+      } else if (parsed.name) {
+        const g = (app.modules.map && app.modules.map.geocode) ? await app.modules.map.geocode(parsed.name) : null;
+        if (g) {
+          coords = { lat: g.lat, lng: g.lng };
+          const rev = await this.reverseGeocode(g.lat, g.lng);
+          if (rev && rev.address) this._setField('t_addr', rev.address);
+          if (rev && rev.hours) this._setField('t_hours', rev.hours);
+        } else {
+          this._setField('t_addr', parsed.name);
+        }
+      }
+      this._pendingCoords = coords;
+      app.toast(coords ? '已自动填入地址/营业时间（门票请手动填）' : '已填入名称，未解析到坐标', 'success');
+    } catch (e) {
+      app.toast('获取失败：' + (e && e.message ? e.message : e), 'error');
+    }
   },
 
   deleteTrip(dayId, spotId) {
