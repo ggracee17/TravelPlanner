@@ -137,6 +137,7 @@ app.modules.itinerary = {
     const win = this.dayWindow(day, expanded);
     const hpx = itinHourPx();
     const spots = day.spots || [];
+    const laneMap = this.computeLanes(spots);
     const totalTicket = spots.reduce((s, x) => s + (parseFloat(x.ticket) || 0), 0);
     const hours = [];
     for (let h = win.start; h < win.end; h++) hours.push(h);
@@ -166,7 +167,7 @@ app.modules.itinerary = {
                ondrop="app.modules.itinerary.onDrop(event)"
                ondragleave="app.modules.itinerary.onDragLeave(event)">
             <div class="tl-hours">${hours.map(h => `<div class="tl-hour"><span class="tl-label">${h}:00</span></div>`).join('')}</div>
-            ${spots.map(s => this.renderBlock(s, day, win)).join('')}
+            ${spots.map(s => this.renderBlock(s, day, win, laneMap[s.id])).join('')}
           </div>
           ${spots.length === 0 ? '<p class="text-xs text-slate-400 mt-2 text-center">勾选「板块5·行程库」加入，或点「➕ 添加」，再拖到合适时间</p>' : ''}
         </div>
@@ -174,7 +175,7 @@ app.modules.itinerary = {
   },
 
   /* ===== 单个行程块 ===== */
-  renderBlock(s, day, win) {
+  renderBlock(s, day, win, laneInfo) {
     const meta = ITIN_TYPES[s.type] || ITIN_TYPES.other;
     const hpx = itinHourPx();
     const span = win.end - win.start;
@@ -183,9 +184,17 @@ app.modules.itinerary = {
     let h = Math.max(parseFloat(s.durationH) || 1, 0.5) * hpx;
     h = Math.min(h, span * hpx - top);
     const dur = parseFloat(s.durationH) || 1;
+    // 重叠分栏：同一时间簇内的块按 lane 左右排列，互不重叠；不重叠的保持整宽
+    const lane = laneInfo ? laneInfo.lane : 0;
+    const lanes = laneInfo ? laneInfo.lanes : 1;
+    const LP = 52, RP = 8, GAP = 4;
+    const leftStyle = `calc(${LP}px + (100% - ${LP + RP}px) * ${lane} / ${lanes})`;
+    const widthStyle = `calc((100% - ${LP + RP}px) / ${lanes} - ${GAP}px)`;
+    // 开始时间不在营业时间内的提示
+    const warn = this.outsideHours(s.startTime, dur, s.hours);
     return `
       <div class="tl-block ${meta.cls}" draggable="true"
-           style="top:${top}px;height:${Math.max(h, 26)}px"
+           style="top:${top}px;height:${Math.max(h, 26)}px;left:${leftStyle};width:${widthStyle};right:auto"
            data-day-id="${day.id}" data-spot-id="${s.id}" data-start="${s.startTime}"
            ondragstart="app.modules.itinerary.onDragStart(event)"
            ondragend="app.modules.itinerary.onDragEnd(event)"
@@ -193,12 +202,69 @@ app.modules.itinerary = {
            title="点击编辑 · 拖动改时间">
         <div class="tl-block-bar"></div>
         <div class="tl-block-main">
+          <div class="tl-block-cat">${meta.label}</div>
           <div class="tl-block-title">${s.name || '未命名'}</div>
           <div class="tl-block-time">${s.startTime || '--:--'}–${itinEndTime(s.startTime, dur)} · ${dur}h</div>
           ${s.reservation === 'needed' ? '<span class="tl-flag">需预约</span>' : ''}
           ${s.ticket > 0 ? `<span class="tl-flag tl-flag-ticket">¥${s.ticket}</span>` : ''}
+          ${warn ? `<span class="tl-flag tl-flag-warn" title="${warn}">⚠️ 非营业</span>` : ''}
         </div>
       </div>`;
+  },
+
+  /* 计算各行程块的左右分栏（lane）：把重叠的时间段聚成簇，簇内贪心分配列。
+     返回 { spotId: { lane, lanes } }，lanes 为该簇总列数。 */
+  computeLanes(spots) {
+    const arr = (spots || []).slice().sort((a, b) =>
+      itinTimeToNum(a.startTime) - itinTimeToNum(b.startTime) || (a.id < b.id ? -1 : 1));
+    const result = {};
+    const used = new Set();
+    const overlap = (c, o) => {
+      const cs = itinTimeToNum(c.startTime), ce = cs + (parseFloat(c.durationH) || 1);
+      const os = itinTimeToNum(o.startTime), oe = os + (parseFloat(o.durationH) || 1);
+      return os < ce - 1e-9 && cs < oe - 1e-9;
+    };
+    for (let i = 0; i < arr.length; i++) {
+      if (used.has(arr[i].id)) continue;
+      const cluster = [];
+      const stack = [arr[i]];
+      used.add(arr[i].id);
+      while (stack.length) {
+        const cur = stack.pop();
+        cluster.push(cur);
+        for (let j = 0; j < arr.length; j++) {
+          const o = arr[j];
+          if (used.has(o.id)) continue;
+          if (overlap(cur, o)) { used.add(o.id); stack.push(o); }
+        }
+      }
+      cluster.sort((a, b) => itinTimeToNum(a.startTime) - itinTimeToNum(b.startTime));
+      const lanesEnd = []; // 每列当前的结束时间
+      cluster.forEach(c => {
+        const st = itinTimeToNum(c.startTime);
+        const en = st + (parseFloat(c.durationH) || 1);
+        let li = lanesEnd.findIndex(e => e <= st + 1e-6);
+        if (li === -1) { li = lanesEnd.length; lanesEnd.push(en); }
+        else lanesEnd[li] = en;
+        c._lane = li;
+      });
+      const lanes = lanesEnd.length;
+      cluster.forEach(c => { result[c.id] = { lane: c._lane, lanes }; });
+    }
+    return result;
+  },
+
+  /* 判断行程开始/结束时间是否落在营业时间之外；返回提示文案或 null */
+  outsideHours(start, dur, hours) {
+    if (!hours) return null;
+    const m = hours.match(/(\d{1,2}:\d{2})\s*[-~至到]\s*(\d{1,2}:\d{2})/);
+    if (!m) return null;
+    const open = itinTimeToNum(m[1]), close = itinTimeToNum(m[2]);
+    const st = itinTimeToNum(start), en = st + (parseFloat(dur) || 1);
+    if (st < open - 1e-6 || en > close + 1e-6) {
+      return `营业时间 ${m[1]}–${m[2]}，当前安排 ${itinNumToTime(st)}–${itinNumToTime(en)}`;
+    }
+    return null;
   },
 
   /* ===== 拖拽：改时间 / 跨日 ===== */
@@ -377,9 +443,9 @@ app.modules.itinerary = {
       <div class="form-field"><label>建议时长(小时)</label><input type="number" id="t_dur" min="0.5" step="0.5" value="${s.durationH || 1}" /></div>
       <div class="form-field col-span-full"><label>地址</label><input id="t_addr" value="${s.address || ''}" /></div>
       <div class="form-field"><label>营业时间</label><input id="t_hours" value="${s.hours || ''}" placeholder="09:00-22:00" /></div>
-      <div class="form-field"><label>🔗 Google Map 链接</label><div class="flex gap-2">
-        <input id="t_map" value="${s.mapUrl || ''}" placeholder="https://www.google.com/maps/place/.../@25.03,121.56,15z" class="flex-1" />
-        <button type="button" class="btn btn-ghost btn-sm" onclick="app.modules.itinerary.fetchFromMapLink()">🔄 获取地址/营业时间</button>
+      <div class="form-field col-span-full"><label>🔗 Google Map 链接（仅用于获取地址）</label><div class="flex gap-2" style="align-items:stretch">
+        <input id="t_map" value="${s.mapUrl || ''}" placeholder="https://www.google.com/maps/place/.../@25.03,121.56,15z" class="flex-1" style="flex:2 1 0%" />
+        <button type="button" class="btn btn-ghost" style="flex:1 1 0%" onclick="app.modules.itinerary.fetchFromMapLink()">🔄 获取地址</button>
       </div></div>
       <div class="form-field col-span-full"><label>🖼️ 图片链接 (URL)</label><input id="t_img" value="${s.image || ''}" placeholder="https://.../photo.jpg" /></div>
       <div class="form-field col-span-full"><label>📝 备注</label><textarea id="t_note" rows="2">${s.note || ''}</textarea></div>
@@ -640,19 +706,13 @@ app.modules.itinerary = {
     return null;
   },
 
-  // OpenStreetMap Nominatim 反向地理编码（免 Key；返回地址 + 营业时间若 OSM 有数据）
+  // OpenStreetMap Nominatim 反向地理编码（免 Key；仅返回地址——地图链接只用于获取地址）
   reverseGeocode(lat, lng) {
     const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' + lat + '&lon=' + lng + '&accept-language=zh-CN';
     return fetch(url, { headers: { 'Accept': 'application/json' } })
       .then(r => r.json())
-      .then(d => {
-        if (!d || d.error) return null;
-        return {
-          address: d.display_name || '',
-          hours: (d.extratags && d.extratags.opening_hours) ? d.extratags.opening_hours : ''
-        };
-      })
-      .catch(() => null);
+      .then(d => (d && !d.error) ? (d.display_name || '') : '')
+      .catch(() => '');
   },
 
   async fetchFromMapLink() {
@@ -665,24 +725,20 @@ app.modules.itinerary = {
       let coords = null;
       if (parsed.lat != null) {
         coords = { lat: parsed.lat, lng: parsed.lng };
-        const rev = await this.reverseGeocode(coords.lat, coords.lng);
-        if (rev) {
-          if (rev.address) this._setField('t_addr', rev.address);
-          if (rev.hours) this._setField('t_hours', rev.hours);
-        }
+        const addr = await this.reverseGeocode(coords.lat, coords.lng);
+        if (addr) this._setField('t_addr', addr);
       } else if (parsed.name) {
         const g = (app.modules.map && app.modules.map.geocode) ? await app.modules.map.geocode(parsed.name) : null;
         if (g) {
           coords = { lat: g.lat, lng: g.lng };
-          const rev = await this.reverseGeocode(g.lat, g.lng);
-          if (rev && rev.address) this._setField('t_addr', rev.address);
-          if (rev && rev.hours) this._setField('t_hours', rev.hours);
+          const addr = await this.reverseGeocode(g.lat, g.lng);
+          if (addr) this._setField('t_addr', addr);
         } else {
           this._setField('t_addr', parsed.name);
         }
       }
       this._pendingCoords = coords;
-      app.toast(coords ? '已自动填入地址/营业时间（门票请手动填）' : '已填入名称，未解析到坐标', 'success');
+      app.toast(coords ? '已自动填入地址（地图链接仅用于获取地址）' : '已填入名称，未解析到坐标', 'success');
     } catch (e) {
       app.toast('获取失败：' + (e && e.message ? e.message : e), 'error');
     }

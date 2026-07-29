@@ -416,11 +416,23 @@ table.data-table tr:hover td { background: #f8fafc; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .tl-block-time { font-size: 0.66rem; color: #475569; margin-top: 1px; }
+.tl-block-cat {
+  display: inline-block;
+  font-size: 0.58rem; font-weight: 700; line-height: 1.1;
+  padding: 0 0.3rem; border-radius: 0.25rem; margin-bottom: 1px;
+}
+.blk-restaurant .tl-block-cat { color:#ef4444; background: rgba(239,68,68,.14); }
+.blk-hotel      .tl-block-cat { color:#a855f7; background: rgba(168,85,247,.14); }
+.blk-spot       .tl-block-cat { color:#3b82f6; background: rgba(59,130,246,.14); }
+.blk-transport  .tl-block-cat { color:#0891b2; background: rgba(8,145,178,.14); }
+.blk-shopping   .tl-block-cat { color:#ea580c; background: rgba(234,88,12,.14); }
+.blk-other      .tl-block-cat { color:#475569; background: rgba(71,85,105,.14); }
 .tl-flag {
   display: inline-block; font-size: 0.6rem; background: #fef3c7; color: #92400e;
   border-radius: 999px; padding: 0 0.35rem; margin-left: 4px; vertical-align: middle;
 }
 .tl-flag-ticket { background: #dcfce7; color: #166534; }
+.tl-flag-warn { background: #fee2e2; color: #b91c1c; }
 
 /* 分类配色 */
 .blk-restaurant { background: #fef2f2; border-left-color: #ef4444; }
