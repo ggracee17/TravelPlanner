@@ -338,8 +338,7 @@ const app = {
     if (this.modules.itinerary) this.modules.itinerary.render();
     if (this.modules.checklists) this.modules.checklists.render();
     if (this.modules.expenses) this.modules.expenses.render();
-    if (this.modules.media) this.modules.media.render();
-    if (this.modules.search) this.modules.search.render();
+    if (this.modules.candidates) this.modules.candidates.render();
   },
 
   /* ====== 全局备份/恢复 ====== */

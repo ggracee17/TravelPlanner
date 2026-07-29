@@ -161,6 +161,35 @@ table.data-table tr:hover td { background: #f8fafc; }
 .badge-pending  { background: #fef3c7; color: #92400e; }
 .badge-planning { background: #dbeafe; color: #1e40af; }
 .badge-completed { background: #d1fae5; color: #065f46; }
+.badge-restaurant { background: #fee2e2; color: #991b1b; }
+.badge-spot     { background: #e0e7ff; color: #3730a3; }
+.badge-hotel    { background: #fae8ff; color: #86198f; }
+.badge-transport{ background: #cffafe; color: #155e75; }
+.badge-shop     { background: #fef3c7; color: #92400e; }
+.badge-other    { background: #e2e8f0; color: #475569; }
+.badge-cand     { background: #d1fae5; color: #065f46; font-size: 0.65rem; padding: 0.05rem 0.4rem; }
+
+/* ===== 备选行程库卡片 ===== */
+.candidate-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+  background: #fff;
+  transition: border-color .15s, box-shadow .15s;
+}
+.candidate-card.is-checked { border-color: #34d399; background: #f0fdf4; }
+.cand-check { display: flex; align-items: flex-start; padding-top: 2px; }
+.cand-check input { width: 20px; height: 20px; accent-color: #10b981; cursor: pointer; }
+.cand-thumb { width: 60px; height: 60px; object-fit: cover; border-radius: 0.5rem; border: 1px solid #e2e8f0; flex: none; }
+.cand-thumb-empty { display: flex; align-items: center; justify-content: center; font-size: 1.6rem; background: #f1f5f9; }
+
+/* ===== 行程景点拖拽 ===== */
+.spot-row { cursor: grab; }
+.spot-row:active { cursor: grabbing; }
+.spot-row.dragging { opacity: 0.4; }
+.spot-row .drag-handle { color: #94a3b8; font-size: 1rem; user-select: none; width: 1.4rem; text-align: center; }
+.spots-dropzone.drag-over { background: #ecfeff; outline: 2px dashed #22d3ee; outline-offset: -4px; border-radius: 0.5rem; }
+.spot-thumb { width: 56px; height: 42px; object-fit: cover; border-radius: 0.35rem; border: 1px solid #e2e8f0; vertical-align: middle; }
 
 /* ===== 清单勾选 ===== */
 .checklist-item {

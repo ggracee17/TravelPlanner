@@ -29,7 +29,7 @@
         <span class="text-2xl">🧭</span>
         <div>
           <h1 class="text-lg font-bold text-slate-800 leading-none">私人旅行规划工作台</h1>
-          <p class="text-tiny text-slate-500">6 大核心板块 · 永久存档 · 服务端存储 / 多人协作</p>
+          <p class="text-tiny text-slate-500">5 大核心板块 · 永久存档 · 服务端存储 / 多人协作</p>
         </div>
       </div>
       <div class="flex-1"></div>
@@ -48,7 +48,7 @@
       <button class="btn btn-primary btn-sm" onclick="app.modules.destinations.newDest()">➕ 新目的地</button>
     </div>
 
-    <!-- 六大板块导航（固定不可删减） -->
+    <!-- 五大板块导航（固定不可删减） -->
     <nav class="bg-slate-50 border-t border-slate-200">
       <div id="navTabs" class="max-w-7xl mx-auto px-2 py-1 flex gap-1 overflow-x-auto">
         <button class="tab-btn active" data-tab="home">🏠 工作台总览</button>
@@ -56,8 +56,7 @@
         <button class="tab-btn" data-tab="itinerary">🗓️ 2·每日行程表</button>
         <button class="tab-btn" data-tab="checklists">✅ 3·行前核对清单</button>
         <button class="tab-btn" data-tab="expenses">💰 4·花销记账台账</button>
-        <button class="tab-btn" data-tab="media">🖼️ 5·图文素材归档</button>
-        <button class="tab-btn" data-tab="search">🔍 6·全网检索知识库</button>
+        <button class="tab-btn" data-tab="candidates">🧩 5·备选行程库</button>
       </div>
     </nav>
   </header>
@@ -75,9 +74,7 @@
 
     <section class="section" data-section="expenses"></section>
 
-    <section class="section" data-section="media"></section>
-
-    <section class="section" data-section="search"></section>
+    <section class="section" data-section="candidates"></section>
 
   </main>
 
@@ -92,8 +89,7 @@
   <script src="module-itinerary.js"></script>
   <script src="module-checklists.js"></script>
   <script src="module-expenses.js"></script>
-  <script src="module-media.js"></script>
-  <script src="module-search.js"></script>
+  <script src="module-candidates.js"></script>
   <!-- SheetJS 用于 Excel 导出（弱网/离线时自动降级为 CSV） -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" onerror="window.__xlsxFailed=true"></script>
   <script>

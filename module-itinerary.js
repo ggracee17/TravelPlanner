@@ -78,28 +78,24 @@ app.modules.itinerary = {
             <div class="p-2 bg-indigo-50 rounded"><strong>🌙 晚：</strong>${day.evening || '-'}</div>
           </div>
 
-          ${spots.length > 0 ? `
-            <h5 class="font-semibold text-sm text-slate-700 mb-1">🎯 游玩景点</h5>
-            <div class="overflow-x-auto mb-3">
-              <table class="data-table">
-                <thead><tr><th>景点</th><th>地址</th><th>营业时间</th><th>门票¥</th><th>建议时长</th><th>交通</th><th>耗时</th><th>交通费¥</th></tr></thead>
-                <tbody>
-                  ${spots.map(s => `
-                    <tr>
-                      <td><strong>${s.name || '-'}</strong></td>
-                      <td class="text-tiny">${s.address || '-'}</td>
-                      <td class="text-tiny">${s.hours || '-'}</td>
-                      <td>${s.ticket || 0}</td>
-                      <td class="text-tiny">${s.duration || '-'}</td>
-                      <td class="text-tiny">${s.transport || '-'}</td>
-                      <td class="text-tiny">${s.transportTime || '-'}</td>
-                      <td>${s.transportCost || 0}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          ` : '<p class="text-xs text-slate-400 mb-3">暂无景点</p>'}
+          <div class="spots-dropzone mb-3" data-day-id="${day.id}"
+               ondragover="app.modules.itinerary.onDragOver(event)"
+               ondrop="app.modules.itinerary.onDrop(event)">
+            <h5 class="font-semibold text-sm text-slate-700 mb-1">🎯 游玩景点 <span class="text-xs font-normal text-slate-400">（拖拽行首 ⠿ 可排序 / 跨日移动）</span></h5>
+            ${spots.length > 0 ? `
+              <div class="overflow-x-auto">
+                <table class="data-table">
+                  <thead><tr>
+                    <th></th><th>景点</th><th>地址</th><th>营业时间</th><th>门票¥</th>
+                    <th>建议时长</th><th>交通</th><th>耗时</th><th>交通费¥</th><th>地图</th><th>图片</th>
+                  </tr></thead>
+                  <tbody>
+                    ${spots.map(s => this.renderSpotRow2(s, day)).join('')}
+                  </tbody>
+                </table>
+              </div>
+            ` : '<p class="text-xs text-slate-400 py-3 text-center rounded bg-slate-50">📍 暂无景点，勾选「板块5·备选行程库」或把别的日期景点拖到这里</p>'}
+          </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
             <div class="p-2 bg-emerald-50 rounded">
@@ -120,6 +116,92 @@ app.modules.itinerary = {
         </div>
       </div>
     `;
+  },
+
+  /* ===== 可拖拽的景点展示行 ===== */
+  renderSpotRow2(s, day) {
+    return `
+      <tr class="spot-row" draggable="true"
+          data-day-id="${day.id}" data-spot-id="${s.id}"
+          ondragstart="app.modules.itinerary.onDragStart(event)"
+          ondragend="app.modules.itinerary.onDragEnd(event)">
+        <td class="drag-handle" title="拖拽排序 / 跨日移动">⠿</td>
+        <td><strong>${s.name || '-'}</strong>${s.sourceId ? ' <span class="badge badge-cand">备选</span>' : ''}</td>
+        <td class="text-tiny">${s.address || '-'}</td>
+        <td class="text-tiny">${s.hours || '-'}</td>
+        <td>${s.ticket || 0}</td>
+        <td class="text-tiny">${s.duration || '-'}</td>
+        <td class="text-tiny">${s.transport || '-'}</td>
+        <td class="text-tiny">${s.transportTime || '-'}</td>
+        <td>${s.transportCost || 0}</td>
+        <td class="text-tiny">${s.mapUrl ? `<a href="${s.mapUrl}" target="_blank" class="text-sky-600 hover:underline" title="${s.mapUrl}">🔗</a>` : '-'}</td>
+        <td>${s.image ? `<img src="${s.image}" class="spot-thumb" alt="" onerror="this.style.display='none'"/>` : '-'}</td>
+      </tr>
+    `;
+  },
+
+  /* ===== 拖拽排序 / 跨日移动 ===== */
+  _drag: null,
+
+  onDragStart(e) {
+    const tr = e.target.closest && e.target.closest('[data-spot-id]');
+    if (!tr) return;
+    this._drag = { dayId: tr.dataset.dayId, spotId: tr.dataset.spotId };
+    tr.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', this._drag.spotId); } catch (_) {}
+  },
+
+  onDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const dz = e.currentTarget;
+    if (dz && dz.classList) dz.classList.add('drag-over');
+  },
+
+  onDrop(e) {
+    e.preventDefault();
+    const dz = e.currentTarget;
+    if (dz && dz.classList) dz.classList.remove('drag-over');
+    const from = this._drag;
+    if (!from) return;
+    const toDayId = dz.dataset.dayId;
+    // 仅相对"不含被拖元素"的列表计算插入位置
+    const rows = [...dz.querySelectorAll('[data-spot-id]')].filter(r => r.dataset.spotId !== from.spotId);
+    let toIndex = rows.length;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i].getBoundingClientRect();
+      if (e.clientY < r.top + r.height / 2) { toIndex = i; break; }
+    }
+    this.moveSpot(from.dayId, from.spotId, toDayId, toIndex);
+    this._drag = null;
+  },
+
+  onDragEnd(e) {
+    const tr = e.target.closest && e.target.closest('[data-spot-id]');
+    if (tr) tr.classList.remove('dragging');
+    this._drag = null;
+    document.querySelectorAll('.spots-dropzone.drag-over').forEach(d => d.classList.remove('drag-over'));
+  },
+
+  moveSpot(fromDayId, spotId, toDayId, toIndex) {
+    const d = app.getActiveDestination();
+    if (!d) return;
+    const list = app.state[d.id]?.itinerary;
+    if (!list) return;
+    const fromDay = list.find(x => x.id === fromDayId);
+    const toDay = list.find(x => x.id === toDayId);
+    if (!fromDay || !toDay || !fromDay.spots) return;
+    const idx = fromDay.spots.findIndex(s => s.id === spotId);
+    if (idx < 0) return;
+    if (!toDay.spots) toDay.spots = [];
+    const [moved] = fromDay.spots.splice(idx, 1);
+    // toIndex 已相对"不含被拖元素"的列表，插入位置直接适用（同日 / 跨日皆然）
+    const insertAt = Math.max(0, Math.min(toIndex, toDay.spots.length));
+    toDay.spots.splice(insertAt, 0, moved);
+    app.saveState();
+    app.renderAll();
+    app.toast('已调整行程顺序', 'success');
   },
 
   /* ===== 按起止日期自动生成空白日程 ===== */
@@ -240,6 +322,9 @@ app.modules.itinerary = {
           <div class="form-field"><label>往返交通方式</label><input data-spot="transport" value="${s.transport || ''}" placeholder="地铁 / 打车 / 步行" /></div>
           <div class="form-field"><label>交通耗时</label><input data-spot="transportTime" value="${s.transportTime || ''}" placeholder="40 分钟" /></div>
           <div class="form-field"><label>交通费 (¥)</label><input type="number" data-spot="transportCost" value="${s.transportCost || 0}" min="0" /></div>
+          <div class="form-field col-span-full"><label>🔗 Google Map / 导航链接</label><input data-spot="mapUrl" value="${s.mapUrl || ''}" placeholder="https://maps.app.goo.gl/..." /></div>
+          <div class="form-field col-span-full"><label>🖼️ 图片链接 (URL)</label><input data-spot="image" value="${s.image || ''}" placeholder="https://.../photo.jpg" /></div>
+          <input type="hidden" data-spot="sourceId" value="${s.sourceId || ''}" />
         </div>
       </div>
     `;
@@ -284,7 +369,10 @@ app.modules.itinerary = {
         duration: get('duration').trim(),
         transport: get('transport').trim(),
         transportTime: get('transportTime').trim(),
-        transportCost: parseFloat(get('transportCost')) || 0
+        transportCost: parseFloat(get('transportCost')) || 0,
+        mapUrl: get('mapUrl').trim(),
+        image: get('image').trim(),
+        sourceId: get('sourceId').trim()
       };
     }).filter(s => s.name);
 
