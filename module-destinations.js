@@ -50,13 +50,13 @@ app.modules.home = {
                 <div class="dest-card ${d.id === app.state.activeDestinationId ? 'active' : ''}">
                   <div class="flex items-start justify-between mb-2">
                     <div>
-                      <div class="text-lg font-bold text-slate-800">${d.city}, ${d.country}</div>
-                      <div class="text-xs text-slate-500">${d.startDate || '?'} → ${d.endDate || '?'} · ${d.days || app.dateDiff(d.startDate, d.endDate)} 天</div>
+                      <div class="text-lg font-bold text-slate-800">${app.destName(d)}</div>
+                      <div class="text-xs text-slate-500">${d.startDate || '?'} → ${d.endDate || '?'} · ${app.dateDiff(d.startDate, d.endDate)} 天</div>
                     </div>
                     <span class="${app.statusClass(d.status)}">${app.statusLabel(d.status)}</span>
                   </div>
                   <div class="text-xs text-slate-600 space-y-0.5">
-                    <div>👥 ${d.travelers || 0} 人　🛂 ${d.visa || '未填写'}　🌸 ${d.bestSeason || '全年'}</div>
+                    <div>👥 ${d.travelers || 0} 人</div>
                     <div>💰 预算 ¥${budget.toFixed(0)} · 已花 ¥${spent.toFixed(0)}（${pct.toFixed(0)}%）</div>
                   </div>
                   <div class="budget-bar mt-1"><div class="budget-bar-fill ${pCls}" style="width:${pct}%"></div></div>
@@ -106,7 +106,7 @@ app.modules.destinations = {
           <button class="btn btn-primary ml-auto" onclick="app.modules.destinations.newDest()">➕ 新建目的地档案</button>
           <button class="btn btn-success" onclick="app.modules.destinations.showImportJSON()">📥 粘贴 AI 建档</button>
         </div>
-        <p class="text-sm text-slate-600 mb-4">每一座城市 = 一份独立档案。字段：城市/国家、起止日期、天数、人数、签证、最佳季节、总预算、状态、备注。</p>
+        <p class="text-sm text-slate-600 mb-4">每一个目的地 = 一份独立档案。字段精简为：目的地名称、起止日期（出行天数自动按日期计算）、同行人数、总预算、状态、备注。</p>
 
         ${dests.length === 0 ? `
           <div class="empty-state">
@@ -119,12 +119,10 @@ app.modules.destinations = {
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>城市/国家</th>
+                  <th>目的地名称</th>
                   <th>起止日期</th>
                   <th>天数</th>
                   <th>人数</th>
-                  <th>签证</th>
-                  <th>最佳季节</th>
                   <th>预算(¥)</th>
                   <th>已花(¥)</th>
                   <th>状态</th>
@@ -137,12 +135,10 @@ app.modules.destinations = {
                   const spent = app.getExpensesTotal(d.id);
                   return `
                     <tr style="${d.id === app.state.activeDestinationId ? 'background:#f0f9ff' : ''}">
-                      <td><strong>${d.city}</strong><br><span class="text-xs text-slate-500">${d.country}</span></td>
+                      <td><strong>${app.destName(d)}</strong></td>
                       <td class="text-tiny">${d.startDate || '?'}<br>~ ${d.endDate || '?'}</td>
-                      <td>${d.days || app.dateDiff(d.startDate, d.endDate)}</td>
+                      <td>${app.dateDiff(d.startDate, d.endDate)}</td>
                       <td>${d.travelers || 0}</td>
-                      <td>${d.visa || '-'}</td>
-                      <td>${d.bestSeason || '-'}</td>
                       <td>¥${(parseFloat(d.budget) || 0).toFixed(0)}</td>
                       <td>¥${spent.toFixed(0)}</td>
                       <td><span class="${app.statusClass(d.status)}">${app.statusLabel(d.status)}</span></td>
@@ -170,15 +166,12 @@ app.modules.destinations = {
     app.openModal('📥 粘贴 AI 建档数据', `
       <p class="text-sm text-slate-600 mb-2">把 AI 在对话里给您的「建档数据」粘贴到下方，点「建档」即可，无需写代码。</p>
       <pre class="text-tiny bg-slate-100 p-2 rounded mb-2 overflow-x-auto" style="white-space:pre-wrap">{
-  "city":"台湾","country":"中国",
-  "startDate":"2026-09-19","endDate":"2026-09-24",
-  "days":6,"travelers":2,
-  "visa":"大陆居民需持大通证+入台证","bestSeason":"9-11月最佳",
-  "budget":0,"status":"planning","notes":""
+  "name":"台湾","startDate":"2026-09-19","endDate":"2026-09-24",
+  "travelers":2,"budget":0,"status":"planning","notes":""
 }</pre>
       <div class="form-field col-span-full">
         <label>粘贴 JSON</label>
-        <textarea id="importDestJSON" rows="9" class="font-mono" placeholder='{"city":"...","country":"..."}'></textarea>
+        <textarea id="importDestJSON" rows="9" class="font-mono" placeholder='{"name":"...","startDate":"...","endDate":"..."}'></textarea>
       </div>
     `, [
       { text: '取消', class: 'btn btn-ghost', action: 'app.closeModal()' },
@@ -191,14 +184,12 @@ app.modules.destinations = {
     if (!raw) return app.toast('请粘贴 JSON', 'warning');
     let data;
     try { data = JSON.parse(raw); } catch (e) { return app.toast('JSON 解析失败：' + e.message, 'error'); }
-    if (!data.city || !data.country) return app.toast('缺少 city / country 字段', 'warning');
+    if (!data.name) return app.toast('缺少 name 字段', 'warning');
     const dest = {
       id: app.uid(),
-      city: data.city, country: data.country,
+      name: data.name,
       startDate: data.startDate || '', endDate: data.endDate || '',
-      days: data.days || app.dateDiff(data.startDate, data.endDate) || null,
       travelers: data.travelers || 0,
-      visa: data.visa || '', bestSeason: data.bestSeason || '',
       budget: parseFloat(data.budget) || 0,
       status: data.status || 'pending',
       notes: data.notes || ''
@@ -224,7 +215,7 @@ app.modules.destinations = {
     app.saveState();
     app.closeModal();
     app.renderAll();
-    app.toast('✅ 已建档：' + dest.city + ', ' + dest.country + (dest.startDate ? '（已自动生成 ' + app.dateDiff(dest.startDate, dest.endDate) + ' 天日程）' : ''), 'success');
+    app.toast('✅ 已建档：' + dest.name + (dest.startDate ? '（已自动生成 ' + app.dateDiff(dest.startDate, dest.endDate) + ' 天日程）' : ''), 'success');
   },
 
 
@@ -236,15 +227,12 @@ app.modules.destinations = {
 
   openForm(existing = null) {
     const d = existing || {};
+    const nameVal = d.name || [d.city, d.country].filter(Boolean).join(', ') || '';
     const html = `
       <div class="form-grid">
-        <div class="form-field">
-          <label>城市 <span class="req">*</span></label>
-          <input id="f_city" value="${d.city || ''}" placeholder="例如：东京" />
-        </div>
-        <div class="form-field">
-          <label>国家 <span class="req">*</span></label>
-          <input id="f_country" value="${d.country || ''}" placeholder="例如：日本" />
+        <div class="form-field col-span-full">
+          <label>目的地名称 <span class="req">*</span></label>
+          <input id="f_name" value="${nameVal}" placeholder="例如：日本·东京 / 台湾" />
         </div>
         <div class="form-field">
           <label>计划出发日期</label>
@@ -254,21 +242,12 @@ app.modules.destinations = {
           <label>计划返回日期</label>
           <input type="date" id="f_end" value="${d.endDate || ''}" />
         </div>
-        <div class="form-field">
-          <label>出行天数</label>
-          <input type="number" id="f_days" value="${d.days || ''}" placeholder="留空将自动按起止日期计算" min="1" />
+        <div class="form-field" style="display:flex;align-items:flex-end">
+          <div class="text-xs text-slate-500">出行天数按起止日期自动计算：<strong id="f_days_preview">${app.dateDiff(d.startDate, d.endDate)}</strong> 天</div>
         </div>
         <div class="form-field">
           <label>同行人数</label>
           <input type="number" id="f_travelers" value="${d.travelers || ''}" min="1" />
-        </div>
-        <div class="form-field">
-          <label>签证要求</label>
-          <input id="f_visa" value="${d.visa || ''}" placeholder="如：免签 / 需签证 / 电子签" />
-        </div>
-        <div class="form-field">
-          <label>最佳旅行季节</label>
-          <input id="f_season" value="${d.bestSeason || ''}" placeholder="如：3-4月樱花季" />
         </div>
         <div class="form-field">
           <label>整体预估总预算 (¥)</label>
@@ -292,27 +271,26 @@ app.modules.destinations = {
       { text: '取消', class: 'btn btn-ghost', action: 'app.closeModal()' },
       { text: '保存', class: 'btn btn-primary', action: `app.modules.destinations.save('${d.id || ''}')` }
     ]);
+    // 起止日期变化时实时预览天数
+    const up = () => { const p = document.getElementById('f_days_preview'); if (p) p.textContent = app.dateDiff(document.getElementById('f_start').value, document.getElementById('f_end').value); };
+    const se = document.getElementById('f_start'), ee = document.getElementById('f_end');
+    if (se) se.addEventListener('change', up);
+    if (ee) ee.addEventListener('change', up);
   },
 
   save(id) {
-    const city = document.getElementById('f_city').value.trim();
-    const country = document.getElementById('f_country').value.trim();
-    if (!city || !country) return app.toast('城市和国家为必填项', 'warning');
+    const name = document.getElementById('f_name').value.trim();
+    if (!name) return app.toast('目的地名称为必填项', 'warning');
 
     const data = {
-      city,
-      country,
+      name,
       startDate: document.getElementById('f_start').value,
       endDate: document.getElementById('f_end').value,
-      days: parseInt(document.getElementById('f_days').value) || null,
       travelers: parseInt(document.getElementById('f_travelers').value) || 0,
-      visa: document.getElementById('f_visa').value.trim(),
-      bestSeason: document.getElementById('f_season').value.trim(),
       budget: parseFloat(document.getElementById('f_budget').value) || 0,
       status: document.getElementById('f_status').value,
       notes: document.getElementById('f_notes').value.trim()
     };
-    if (!data.days) data.days = app.dateDiff(data.startDate, data.endDate);
 
     if (id) {
       const idx = app.state.destinations.findIndex(x => x.id === id);

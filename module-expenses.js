@@ -51,7 +51,7 @@ app.modules.expenses = {
           </div>
         </div>
         <p class="text-sm text-slate-600 mb-4">
-          当前目的地：<strong class="text-sky-700">${d.city}, ${d.country}</strong>　·　共 <strong>${expenses.length}</strong> 笔消费
+          当前目的地：<strong class="text-sky-700">${app.destName(d)}</strong>　·　共 <strong>${expenses.length}</strong> 笔消费
         </p>
 
         <!-- 预算总览 -->
@@ -267,11 +267,11 @@ app.modules.expenses = {
     }));
     const total = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
     rows.push({ 日期: '', 分类: '合计', 详情: '', 金额: total, 支付方式: '' });
-    if (typeof XLSX === 'undefined') { app.downloadCSV(`expense_${d.city}_${new Date().toISOString().slice(0,10)}.csv`, rows); return; }
+    if (typeof XLSX === 'undefined') { app.downloadCSV(`expense_${app.destName(d)}_${new Date().toISOString().slice(0,10)}.csv`, rows); return; }
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), `${d.city}-花销`);
-    XLSX.writeFile(wb, `expense_${d.city}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), `${app.destName(d)}-花销`);
+    XLSX.writeFile(wb, `expense_${app.destName(d)}_${new Date().toISOString().slice(0,10)}.xlsx`);
     app.toast('已导出花销为 Excel', 'success');
   }
 };

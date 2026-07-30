@@ -1,11 +1,16 @@
 /* ============================================================
    板块6：行程地图总览
-   用 Leaflet + OpenStreetMap（免 API Key）在地图上标出每日行程地点；
+   使用 Google Maps JavaScript API 在地图上标出每日行程地点；
    支持按日期下拉筛选（全部 / 某一天）。
-   坐标优先用行程块里手填的经纬度；未填则用地名+地址通过
-   OpenStreetMap Nominatim 地理编码定位，并回写保存。
-   无网络 / Leaflet 加载失败时降级为地点列表。
+   坐标优先用行程块里填的经纬度（来自 Google Map 链接解析）；
+   未填则按「名称 + 地址」通过 Google Geocoding 自动定位，并回写保存。
+   无 API Key / 加载失败时降级为地点列表。
+
+   使用前：在下方 GMAPS_API_KEY 填入你的 Google Maps API Key
+   （需在 Google Cloud 控制台启用 Maps JavaScript API 与 Geocoding API）。
    ============================================================ */
+
+const GMAPS_API_KEY = ''; // ← 在此粘贴你的 Google Maps API Key
 
 const MAP_COLORS = {
   restaurant: '#ef4444', hotel: '#a855f7', spot: '#3b82f6',
@@ -17,6 +22,7 @@ app.modules.map = {
   _loading: false,
   _failed: false,
   _cbs: [],
+  _lastBounds: null,
 
   render() {
     const sec = document.querySelector('[data-section=map]');
@@ -49,21 +55,25 @@ app.modules.map = {
           </div>
         </div>
         <p class="text-sm text-slate-600 mb-3">
-          在地图上标出每日行程的地点，可下拉切换查看<strong class="text-sky-700">某一天</strong>的行程分布。
-          坐标优先用行程块里填的「纬度 / 经度」；未填则按「名称 + 地址」通过 OpenStreetMap 自动定位（需联网）。
+          在 Google 地图上标出每日行程的地点，可下拉切换查看<strong class="text-sky-700">某一天</strong>的行程分布。
+          坐标优先用行程块里填的「纬度 / 经度」（粘贴 Google Map 链接会自动获取）；未填则按「名称 + 地址」通过 Google 地理编码自动定位（需联网）。
         </p>
         <div id="mapView" class="map-view"></div>
         <div id="mapList" class="mt-3"></div>
       </div>`;
-    this.ensureLeaflet(() => this.showMap());
+    this.ensureMaps(() => this.showMap());
   },
 
   onShow() {
-    if (this._map) setTimeout(() => { try { this._map.invalidateSize(); } catch (e) {} }, 60);
+    if (this._map && window.google && window.google.maps) {
+      setTimeout(() => {
+        try { window.google.maps.event.trigger(this._map, 'resize'); if (this._lastBounds) this._map.fitBounds(this._lastBounds); } catch (e) {}
+      }, 60);
+    }
   },
 
   rerender() {
-    this.ensureLeaflet(() => this.showMap());
+    this.ensureMaps(() => this.showMap());
   },
 
   _sel() {
@@ -85,30 +95,54 @@ app.modules.map = {
     return out;
   },
 
-  ensureLeaflet(cb) {
-    if (typeof window !== 'undefined' && window.L) { cb(); return; }
-    if (this._failed) { cb(); return; }
+  /* 动态加载 Google Maps JS API（仅需一次） */
+  ensureMaps(cb) {
+    if (!GMAPS_API_KEY) { this._failed = false; cb(); return; }
+    if (typeof window !== 'undefined' && window.google && window.google.maps) { cb(); return; }
     if (this._loading) { this._cbs.push(cb); return; }
     this._loading = true; this._cbs = [cb];
-    if (typeof document !== 'undefined' && !document.getElementById('leaflet-css')) {
-      const lk = document.createElement('link');
-      lk.id = 'leaflet-css'; lk.rel = 'stylesheet';
-      lk.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(lk);
-    }
+    const win = window;
+    const cbName = '__gmapsReady' + Date.now();
+    win[cbName] = () => {
+      this._loading = false;
+      this._cbs.forEach(f => { try { f(); } catch (e) {} });
+      this._cbs = [];
+      try { delete win[cbName]; } catch (e) {}
+    };
     const s = document.createElement('script');
-    s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    s.onload = () => { this._loading = false; this._cbs.forEach(f => f()); this._cbs = []; };
-    s.onerror = () => { this._loading = false; this._failed = true; this._cbs.forEach(f => f()); this._cbs = []; };
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(GMAPS_API_KEY) + '&callback=' + cbName;
+    s.async = true;
+    s.onerror = () => {
+      this._loading = false; this._failed = true;
+      this._cbs.forEach(f => { try { f(); } catch (e) {} });
+      this._cbs = [];
+    };
     document.head.appendChild(s);
   },
 
+  /* Google 地理编码：名称/地址 → 坐标 */
+  geocode(q) {
+    return new Promise((resolve) => {
+      if (!GMAPS_API_KEY || typeof window === 'undefined' || !window.google || !window.google.maps || !window.google.maps.Geocoder) { resolve(null); return; }
+      try {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ address: q }, (results, status) => {
+          if (status === 'OK' && results && results[0]) {
+            const loc = results[0].geometry.location;
+            resolve({ lat: loc.lat(), lng: loc.lng() });
+          } else { resolve(null); }
+        });
+      } catch (e) { resolve(null); }
+    });
+  },
+
   async showMap() {
-    const L = (typeof window !== 'undefined') ? window.L : undefined;
     const items = this.collectSpots(this._sel());
-    if (typeof L === 'undefined' || this._failed) {
-      this.renderList(items, []);
-      if (this._failed) this._noteMapFallback();
+    if (!GMAPS_API_KEY || this._failed || typeof window === 'undefined' || !window.google || !window.google.maps) {
+      const located = items.filter(it => it.spot.lat != null && it.spot.lng != null);
+      this.renderList(items, located);
+      if (!GMAPS_API_KEY) this._noteNeedKey();
+      else if (this._failed) this._noteMapFallback();
       return;
     }
     // 地理编码缺失坐标
@@ -129,37 +163,35 @@ app.modules.map = {
     this.drawMap(withCoord);
   },
 
-  geocode(q) {
-    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q);
-    return fetch(url, { headers: { 'Accept': 'application/json' } })
-      .then(r => r.json())
-      .then(arr => (arr && arr[0]) ? { lat: parseFloat(arr[0].lat), lng: parseFloat(arr[0].lon) } : null)
-      .catch(() => null);
+  _pin(color) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="36" viewBox="0 0 24 36">` +
+      `<path fill="${color}" stroke="#ffffff" stroke-width="1.5" d="M12 0C5.4 0 0 5.4 0 12c0 8 12 24 12 24s12-16 12-24c0-6.6-5.4-12-12-12z"/>` +
+      `<circle cx="12" cy="12" r="5" fill="#ffffff"/></svg>`;
+    return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
   },
 
   drawMap(withCoord) {
     const view = document.getElementById('mapView');
     if (!view) return;
-    if (this._map) { try { this._map.remove(); } catch (e) {} this._map = null; }
-    const L = window.L;
-    const map = L.map(view, { scrollWheelZoom: true }).setView([25.033, 121.565], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '© OpenStreetMap'
-    }).addTo(map);
-    const bounds = [];
+    if (this._map) { try { this._map = null; } catch (e) {} }
+    const gm = window.google.maps;
+    const center = withCoord.length ? { lat: parseFloat(withCoord[0].spot.lat), lng: parseFloat(withCoord[0].spot.lng) } : { lat: 25.033, lng: 121.565 };
+    const map = new gm.Map(view, { center, zoom: 12, mapTypeControl: true, streetViewControl: true });
+    const bounds = new gm.LatLngBounds();
     withCoord.forEach(it => {
       const s = it.spot;
-      const m = L.marker([s.lat, s.lng]).addTo(map);
-      m.bindPopup(
-        `<div style="min-width:170px"><strong>${this._esc(s.name)}</strong>` +
+      const pos = { lat: parseFloat(s.lat), lng: parseFloat(s.lng) };
+      const marker = new gm.Marker({ position: pos, map, title: s.name || '地点', icon: this._pin(MAP_COLORS[s.type] || MAP_COLORS.other) });
+      const content = `<div style="min-width:170px"><strong>${this._esc(s.name)}</strong>` +
         `<br><span style="font-size:.7rem;color:#64748b">${it.dayIndex >= 0 ? ('Day ' + (it.dayIndex + 1) + ' ') : ''}${s.startTime || ''}</span>` +
         (s.address ? `<br><span style="font-size:.7rem;color:#475569">${this._esc(s.address)}</span>` : '') +
         (s.mapUrl ? `<br><a href="${s.mapUrl}" target="_blank">🔗 Google Map</a>` : '') +
-        `</div>`
-      );
-      bounds.push([s.lat, s.lng]);
+        `</div>`;
+      const info = new gm.InfoWindow({ content });
+      marker.addListener('click', () => info.open(map, marker));
+      bounds.extend(pos);
     });
-    if (bounds.length) map.fitBounds(bounds, { padding: [40, 40] });
+    if (withCoord.length > 1) { map.fitBounds(bounds); this._lastBounds = bounds; }
     this._map = map;
   },
 
@@ -185,9 +217,14 @@ app.modules.map = {
     }).join('') + `</div>`;
   },
 
+  _noteNeedKey() {
+    const view = document.getElementById('mapView');
+    if (view) view.innerHTML = '<div class="map-fallback">⚠️ 尚未配置 Google Maps API Key。请在 <code>module-map.js</code> 顶部的 <code>GMAPS_API_KEY</code> 填入你的 Key（需在 Google Cloud 启用 Maps JavaScript API 与 Geocoding API），刷新后即可显示地图。下方列表仍可正常查看地点。</div>';
+  },
+
   _noteMapFallback() {
     const view = document.getElementById('mapView');
-    if (view) view.innerHTML = '<div class="map-fallback">⚠️ 地图组件加载失败（可能离线或被网络拦截），已下方列表展示地点。连网后刷新即可加载在线地图。</div>';
+    if (view) view.innerHTML = '<div class="map-fallback">⚠️ Google Maps 加载失败（可能 Key 无效、未启用对应 API 或网络被拦截），已下方列表展示地点。检查 Key 与 API 启用状态后刷新即可。</div>';
   },
 
   _esc(s) {

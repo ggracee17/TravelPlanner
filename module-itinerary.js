@@ -82,7 +82,7 @@ app.modules.itinerary = {
           </div>
         </div>
         <p class="text-sm text-slate-600 mb-4">
-          当前目的地：<strong class="text-sky-700">${d.city}, ${d.country}</strong>　·　共 <strong>${d.days || 0}</strong> 天　·　已规划 <strong>${days.length}</strong> 天。
+          当前目的地：<strong class="text-sky-700">${app.destName(d)}</strong>　·　共 <strong>${app.dateDiff(d.startDate, d.endDate)}</strong> 天　·　已规划 <strong>${days.length}</strong> 天。
           下方为<strong>横向时间轴</strong>：每天一条时间轴，各天并排可左右滚动；每个行程块按分类着色
           （餐厅红 / 酒店紫 / 景点蓝 / 交通青 / 购物橙 / 其他灰），<strong>拖动块</strong>即可改时间或换到别的日期
           （对齐线落在块的<strong>开始时间</strong>处）。时间轴默认只显示有行程的时段，点「🔽 展开全部时间」查看完整 06:00–24:00。

@@ -31,6 +31,8 @@ app.modules.candidates = {
     }
 
     const sorted = this.sortCandidates(cands, placedMap);
+    const filter = app.state.candFilter || '__all';
+    const view = filter === '__all' ? sorted : sorted.filter(c => c.type === filter);
 
     sec.innerHTML = `
       <div class="card">
@@ -44,7 +46,7 @@ app.modules.candidates = {
           之后可在时间轴上<strong class="text-sky-700">拖动块</strong>改时间、或拖到别的日期。
           下方排序：<strong>未加入行程的排最前</strong>，已加入的按<strong>所在日程日期</strong>顺序排。
           点「编辑」与板块2使用<strong>同一表单</strong>，两处改动会<strong>双向同步</strong>。
-        </p>
+          </p>
 
         ${sorted.length === 0 ? `
           <div class="empty-state">
@@ -53,12 +55,23 @@ app.modules.candidates = {
             <p class="text-sm">点击右上角「➕ 新增行程库项目」，例如录入 3 家备选餐厅（含地址 / 营业时间 / Google Map 链接 / 图片），勾选心仪的那家即可进入每日行程。</p>
           </div>
         ` : `
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            ${sorted.map(c => this.renderCard(c, placedMap[c.id])).join('')}
+          <div class="flex flex-wrap gap-2 mb-3">
+            <button class="btn btn-sm ${filter === '__all' ? 'btn-primary' : 'btn-ghost'}" onclick="app.modules.candidates.setFilter('__all')">全部</button>
+            ${['餐厅','景点','住宿','交通','购物','其他'].map(c => `<button class="btn btn-sm ${filter === c ? 'btn-primary' : 'btn-ghost'}" onclick="app.modules.candidates.setFilter('${c}')">${c}</button>`).join('')}
           </div>
+          ${view.length === 0 ? '<p class="text-sm text-slate-400">该分类下暂无行程</p>' : `
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            ${view.map(c => this.renderCard(c, placedMap[c.id])).join('')}
+          </div>`}
         `}
       </div>
     `;
+  },
+
+  /* 分类筛选 */
+  setFilter(f) {
+    app.state.candFilter = f;
+    app.renderAll();
   },
 
   /* 排序：未加入→最前；已加入→按日期(dayIndex)再按开始时间 */

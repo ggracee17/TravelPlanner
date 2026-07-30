@@ -283,7 +283,7 @@ const app = {
     }
     wrap.classList.remove('hidden');
     sel.innerHTML = this.state.destinations
-      .map(d => `<option value="${d.id}">${d.city}, ${d.country} (${d.startDate || '?'} ~ ${d.endDate || '?'})</option>`)
+      .map(d => `<option value="${d.id}">${app.destName(d)} (${d.startDate || '?'} ~ ${d.endDate || '?'})</option>`)
       .join('');
     if (!this.state.activeDestinationId || !this.state.destinations.find(d => d.id === this.state.activeDestinationId)) {
       this.state.activeDestinationId = this.state.destinations[0].id;
@@ -373,9 +373,9 @@ const app = {
       // 2. 收集所有 sheet 数据
       const sheets = [];
       const destRows = this.state.destinations.map(d => ({
-        '城市': d.city, '国家': d.country, '起止日期': `${d.startDate || ''} ~ ${d.endDate || ''}`,
-        '出行天数': d.days, '同行人数': d.travelers, '签证要求': d.visa,
-        '最佳旅行季节': d.bestSeason, '总预算(¥)': d.budget, '状态': this.statusLabel(d.status), '备注': d.notes
+        '目的地': app.destName(d), '起止日期': `${d.startDate || ''} ~ ${d.endDate || ''}`,
+        '出行天数': app.dateDiff(d.startDate, d.endDate), '同行人数': d.travelers,
+        '总预算(¥)': d.budget, '状态': this.statusLabel(d.status), '备注': d.notes
       }));
       if (destRows.length) sheets.push({ name: '目的地档案', rows: destRows });
 
@@ -390,19 +390,19 @@ const app = {
             '酒店': day.hotel?.name, '住宿费(¥)': day.hotel?.cost, '餐饮': day.dining,
             '导航链接': day.mapLink, '备注': day.notes
           }));
-          sheets.push({ name: `${d.city}-每日行程`, rows });
+          sheets.push({ name: `${app.destName(d)}-每日行程`, rows });
         }
         if (bucket.expenses && bucket.expenses.length) {
           const rows = bucket.expenses.map(e => ({
             '日期': e.date, '分类': e.category, '详情': e.detail, '金额(¥)': e.amount, '支付方式': e.payment
           }));
-          sheets.push({ name: `${d.city}-花销`, rows });
+          sheets.push({ name: `${app.destName(d)}-花销`, rows });
         }
         if (bucket.media && bucket.media.length) {
           const rows = bucket.media.map(m => ({
             '类型': m.type, '日期': m.date, '说明': m.caption, '链接': m.url
           }));
-          sheets.push({ name: `${d.city}-素材`, rows });
+          sheets.push({ name: `${app.destName(d)}-素材`, rows });
         }
       });
 
@@ -578,6 +578,12 @@ const app = {
     if (!start || !end) return 0;
     const s = new Date(start), e = new Date(end);
     return Math.max(0, Math.round((e - s) / 86400000) + 1);
+  },
+
+  /* 目的地显示名称：优先用合并后的 name，旧数据回退到「城市, 国家」 */
+  destName(d) {
+    if (!d) return '未命名目的地';
+    return d.name || [d.city, d.country].filter(Boolean).join(', ') || '未命名目的地';
   },
 
   /* ====== 工具：格式化今日 ====== */

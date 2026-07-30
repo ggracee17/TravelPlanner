@@ -80,7 +80,7 @@ app.modules.checklists = {
     const docsChecked = docs.filter(x => x.checked).length;
     const lugChecked = lug.filter(x => x.checked).length;
     const d = app.getActiveDestination();
-    const climate = d ? this.suggestClimate(d.country, d.startDate, d.city) : '请先在板块1选择目的地';
+    const climate = d ? this.suggestClimate(app.destName(d), d.startDate) : '请先在板块1选择目的地';
 
     sec.innerHTML = `
       <div class="card">
@@ -259,26 +259,26 @@ app.modules.checklists = {
   },
 
   /* ===== 气候建议 ===== */
-  suggestClimate(country, startDate, city) {
-    if (!country) return '请先在板块1选择目的地';
+  suggestClimate(place, startDate) {
+    if (!place) return '请先在板块1选择目的地';
     const month = startDate ? new Date(startDate).getMonth() + 1 : new Date().getMonth() + 1;
     const tropical = ['泰国', '越南', '新加坡', '马来西亚', '印度尼西亚', '菲律宾', '马尔代夫', '斯里兰卡', '柬埔寨'];
     const cold = ['俄罗斯', '冰岛', '挪威', '瑞典', '芬兰', '加拿大', '瑞士(冬)'];
 
     // 台湾：5-10月为炎热潮湿且台风季（9月仍是盛夏尾声，午后雷阵雨频繁、台风风险高）
-    if (city && /台湾/.test(city) && month >= 5 && month <= 10) {
-      return `🌪️ 台湾湿热台风季（${country} ${month}月）——气温 21-31℃、湿度高、午后雷阵雨频繁、台风风险，建议：速干透气衣物、高倍防晒、驱蚊水、折叠雨伞/雨衣、防水文件袋、便携风扇`;
+    if (/台湾/.test(place) && month >= 5 && month <= 10) {
+      return `🌪️ 台湾湿热台风季（${place} ${month}月）——气温 21-31℃、湿度高、午后雷阵雨频繁、台风风险，建议：速干透气衣物、高倍防晒、驱蚊水、折叠雨伞/雨衣、防水文件袋、便携风扇`;
     }
 
     let suggestion = '';
-    if (tropical.includes(country)) {
-      suggestion = `🌴 热带气候（${country}）——气温 25-35℃，建议：轻薄透气衣物、泳衣、高倍防晒、驱蚊水、凉鞋、雨伞`;
-    } else if (cold.includes(country) || month <= 2 || month === 12) {
-      suggestion = `❄️ 寒冷气候（${country} ${month}月）——气温 0℃ 以下，建议：厚羽绒、保暖内衣、防水手套、暖宝宝、雪地靴、润唇膏`;
+    if (tropical.includes(place)) {
+      suggestion = `🌴 热带气候（${place}）——气温 25-35℃，建议：轻薄透气衣物、泳衣、高倍防晒、驱蚊水、凉鞋、雨伞`;
+    } else if (cold.includes(place) || month <= 2 || month === 12) {
+      suggestion = `❄️ 寒冷气候（${place} ${month}月）——气温 0℃ 以下，建议：厚羽绒、保暖内衣、防水手套、暖宝宝、雪地靴、润唇膏`;
     } else if (month >= 6 && month <= 8) {
-      suggestion = `☀️ 炎热夏季（${country} ${month}月）——气温 28-38℃，建议：短袖短裤、防晒服、太阳镜、补水喷雾、便携风扇`;
+      suggestion = `☀️ 炎热夏季（${place} ${month}月）——气温 28-38℃，建议：短袖短裤、防晒服、太阳镜、补水喷雾、便携风扇`;
     } else {
-      suggestion = `🌤️ 温和气候（${country} ${month}月）——气温 15-25℃，建议：长袖+薄外套、薄毛衣、长裤、舒适步行鞋`;
+      suggestion = `🌤️ 温和气候（${place} ${month}月）——气温 15-25℃，建议：长袖+薄外套、薄毛衣、长裤、舒适步行鞋`;
     }
     return suggestion;
   },
@@ -287,7 +287,7 @@ app.modules.checklists = {
   autoAdjustLug() {
     const d = app.getActiveDestination();
     if (!d) return app.toast('请先在板块1选择目的地', 'warning');
-    const climate = this.suggestClimate(d.country, d.startDate, d.city);
+    const climate = this.suggestClimate(app.destName(d), d.startDate);
     const lug = app.state.checklists.luggage;
 
     // 根据建议自动勾选 / 新增项
