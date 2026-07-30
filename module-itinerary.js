@@ -183,6 +183,9 @@ app.modules.itinerary = {
     top = Math.max(0, Math.min(top, span * hpx - hpx));
     let h = Math.max(parseFloat(s.durationH) || 1, 0.5) * hpx;
     h = Math.min(h, span * hpx - top);
+    const dispH = Math.max(h, 26);
+    const isShort = dispH < 50;    // < ~1 小时：隐藏标签，缩小字号
+    const isXShort = dispH < 30;   // < ~0.5 小时：连时间也隐藏，只留名称
     const dur = parseFloat(s.durationH) || 1;
     // 重叠分栏：同一时间簇内的块按 lane 左右排列，互不重叠；不重叠的保持整宽
     const lane = laneInfo ? laneInfo.lane : 0;
@@ -192,22 +195,27 @@ app.modules.itinerary = {
     const widthStyle = `calc((100% - ${LP + RP}px) / ${lanes} - ${GAP}px)`;
     // 开始时间不在营业时间内的提示
     const warn = this.outsideHours(s.startTime, dur, s.hours);
+    let flags = '';
+    if (!isShort) {
+      if (s.reservation === 'needed') flags += '<span class="tl-flag">需预约</span>';
+      if (s.ticket > 0) flags += `<span class="tl-flag tl-flag-ticket">¥${s.ticket}</span>`;
+      if (warn) flags += `<span class="tl-flag tl-flag-warn" title="${warn}">⚠️ 非营业</span>`;
+    }
+    const cls = `tl-block ${meta.cls}${isShort ? ' tl-short' : ''}${isXShort ? ' tl-xshort' : ''}`;
+    const title = `点击编辑 · 拖动改时间${warn ? ' · ' + warn : ''}`;
     return `
-      <div class="tl-block ${meta.cls}" draggable="true"
-           style="top:${top}px;height:${Math.max(h, 26)}px;left:${leftStyle};width:${widthStyle};right:auto"
+      <div class="${cls}" draggable="true"
+           style="top:${top}px;height:${dispH}px;left:${leftStyle};width:${widthStyle};right:auto"
            data-day-id="${day.id}" data-spot-id="${s.id}" data-start="${s.startTime}"
            ondragstart="app.modules.itinerary.onDragStart(event)"
            ondragend="app.modules.itinerary.onDragEnd(event)"
            onclick="app.modules.itinerary.openTripForm('spot','${day.id}','${s.id}')"
-           title="点击编辑 · 拖动改时间">
-        <div class="tl-block-bar"></div>
+           title="${title}">
+        <div class="tl-block-cat-v">${meta.label}</div>
         <div class="tl-block-main">
-          <div class="tl-block-cat">${meta.label}</div>
           <div class="tl-block-title">${s.name || '未命名'}</div>
-          <div class="tl-block-time">${s.startTime || '--:--'}–${itinEndTime(s.startTime, dur)} · ${dur}h</div>
-          ${s.reservation === 'needed' ? '<span class="tl-flag">需预约</span>' : ''}
-          ${s.ticket > 0 ? `<span class="tl-flag tl-flag-ticket">¥${s.ticket}</span>` : ''}
-          ${warn ? `<span class="tl-flag tl-flag-warn" title="${warn}">⚠️ 非营业</span>` : ''}
+          ${isXShort ? '' : `<div class="tl-block-time">${s.startTime || '--:--'}–${itinEndTime(s.startTime, dur)} · ${dur}h</div>`}
+          ${flags ? `<div class="tl-flags">${flags}</div>` : ''}
         </div>
       </div>`;
   },

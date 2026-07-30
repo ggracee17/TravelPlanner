@@ -305,7 +305,7 @@ const app = {
     if (!d || !el) return;
     const expenseSum = this.getExpensesTotal(d.id);
     const budget = parseFloat(d.budget) || 0;
-    el.textContent = `· ${d.travelers || 0} 人 · 预算 ¥${budget.toFixed(0)} · 已花 ¥${expenseSum.toFixed(0)} · ${this.statusLabel(d.status)}`;
+    el.textContent = `· ${d.travelers || 0} 人 · 预算 ¥${budget.toFixed(0)} · 已花 ¥${expenseSum.toFixed(0)}`;
   },
 
   /* ====== 工具：当前目的地 ====== */
@@ -317,14 +317,6 @@ const app = {
   getExpensesTotal(destId) {
     const list = this.state[destId]?.expenses || [];
     return list.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-  },
-
-  /* ====== 工具：状态徽章 ====== */
-  statusLabel(s) {
-    return { pending: '待规划', planning: '规划中', completed: '已完成' }[s] || s || '待规划';
-  },
-  statusClass(s) {
-    return { pending: 'badge badge-pending', planning: 'badge badge-planning', completed: 'badge badge-completed' }[s] || 'badge badge-pending';
   },
 
   /* ====== 工具：UUID ====== */
@@ -375,7 +367,7 @@ const app = {
       const destRows = this.state.destinations.map(d => ({
         '目的地': app.destName(d), '起止日期': `${d.startDate || ''} ~ ${d.endDate || ''}`,
         '出行天数': app.dateDiff(d.startDate, d.endDate), '同行人数': d.travelers,
-        '总预算(¥)': d.budget, '状态': this.statusLabel(d.status), '备注': d.notes
+        '总预算(¥)': d.budget, '备注': d.notes
       }));
       if (destRows.length) sheets.push({ name: '目的地档案', rows: destRows });
 

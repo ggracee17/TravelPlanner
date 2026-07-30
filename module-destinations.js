@@ -10,8 +10,7 @@ app.modules.home = {
     const dests = app.state.destinations;
     const totalBudget = dests.reduce((s, d) => s + (parseFloat(d.budget) || 0), 0);
     const totalSpent = dests.reduce((s, d) => s + app.getExpensesTotal(d.id), 0);
-    const completedCount = dests.filter(d => d.status === 'completed').length;
-    const planningCount = dests.filter(d => d.status === 'planning').length;
+    const totalDays = dests.reduce((s, d) => s + app.dateDiff(d.startDate, d.endDate), 0);
 
     sec.innerHTML = `
       <div class="card">
@@ -25,16 +24,16 @@ app.modules.home = {
             <div class="text-xs text-slate-600 mt-1">目的地总数</div>
           </div>
           <div class="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-            <div class="text-2xl font-bold text-emerald-700">${planningCount}</div>
-            <div class="text-xs text-slate-600 mt-1">规划中</div>
+            <div class="text-2xl font-bold text-emerald-700">¥${totalSpent.toFixed(0)}</div>
+            <div class="text-xs text-slate-600 mt-1">总已花</div>
           </div>
           <div class="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
-            <div class="text-2xl font-bold text-indigo-700">${completedCount}</div>
-            <div class="text-xs text-slate-600 mt-1">已完成</div>
+            <div class="text-2xl font-bold text-indigo-700">¥${totalBudget.toFixed(0)}</div>
+            <div class="text-xs text-slate-600 mt-1">总预算</div>
           </div>
           <div class="p-4 bg-amber-50 rounded-lg border border-amber-200">
-            <div class="text-2xl font-bold text-amber-700">¥${totalBudget.toFixed(0)}</div>
-            <div class="text-xs text-slate-600 mt-1">总预算</div>
+            <div class="text-2xl font-bold text-amber-700">${totalDays}</div>
+            <div class="text-xs text-slate-600 mt-1">行程总天数</div>
           </div>
         </div>
 
@@ -48,12 +47,9 @@ app.modules.home = {
               const pCls = pct >= 100 ? 'danger' : pct >= 80 ? 'warning' : '';
               return `
                 <div class="dest-card ${d.id === app.state.activeDestinationId ? 'active' : ''}">
-                  <div class="flex items-start justify-between mb-2">
-                    <div>
-                      <div class="text-lg font-bold text-slate-800">${app.destName(d)}</div>
-                      <div class="text-xs text-slate-500">${d.startDate || '?'} → ${d.endDate || '?'} · ${app.dateDiff(d.startDate, d.endDate)} 天</div>
-                    </div>
-                    <span class="${app.statusClass(d.status)}">${app.statusLabel(d.status)}</span>
+                  <div class="mb-2">
+                    <div class="text-lg font-bold text-slate-800">${app.destName(d)}</div>
+                    <div class="text-xs text-slate-500">${d.startDate || '?'} → ${d.endDate || '?'} · ${app.dateDiff(d.startDate, d.endDate)} 天</div>
                   </div>
                   <div class="text-xs text-slate-600 space-y-0.5">
                     <div>👥 ${d.travelers || 0} 人</div>
@@ -106,7 +102,7 @@ app.modules.destinations = {
           <button class="btn btn-primary ml-auto" onclick="app.modules.destinations.newDest()">➕ 新建目的地档案</button>
           <button class="btn btn-success" onclick="app.modules.destinations.showImportJSON()">📥 粘贴 AI 建档</button>
         </div>
-        <p class="text-sm text-slate-600 mb-4">每一个目的地 = 一份独立档案。字段精简为：目的地名称、起止日期（出行天数自动按日期计算）、同行人数、总预算、状态、备注。</p>
+        <p class="text-sm text-slate-600 mb-4">每一个目的地 = 一份独立档案。字段精简为：目的地名称、起止日期（出行天数自动按日期计算）、同行人数、总预算、备注。</p>
 
         ${dests.length === 0 ? `
           <div class="empty-state">
@@ -125,7 +121,6 @@ app.modules.destinations = {
                   <th>人数</th>
                   <th>预算(¥)</th>
                   <th>已花(¥)</th>
-                  <th>状态</th>
                   <th>备注</th>
                   <th>操作</th>
                 </tr>
@@ -141,7 +136,6 @@ app.modules.destinations = {
                       <td>${d.travelers || 0}</td>
                       <td>¥${(parseFloat(d.budget) || 0).toFixed(0)}</td>
                       <td>¥${spent.toFixed(0)}</td>
-                      <td><span class="${app.statusClass(d.status)}">${app.statusLabel(d.status)}</span></td>
                       <td class="text-tiny max-w-[200px]">${d.notes || '-'}</td>
                       <td class="text-tiny">
                         <button class="btn btn-ghost btn-sm" onclick="app.modules.destinations.edit('${d.id}')">✏️</button>
@@ -167,7 +161,7 @@ app.modules.destinations = {
       <p class="text-sm text-slate-600 mb-2">把 AI 在对话里给您的「建档数据」粘贴到下方，点「建档」即可，无需写代码。</p>
       <pre class="text-tiny bg-slate-100 p-2 rounded mb-2 overflow-x-auto" style="white-space:pre-wrap">{
   "name":"台湾","startDate":"2026-09-19","endDate":"2026-09-24",
-  "travelers":2,"budget":0,"status":"planning","notes":""
+  "travelers":2,"budget":0,"notes":""
 }</pre>
       <div class="form-field col-span-full">
         <label>粘贴 JSON</label>
@@ -191,7 +185,6 @@ app.modules.destinations = {
       startDate: data.startDate || '', endDate: data.endDate || '',
       travelers: data.travelers || 0,
       budget: parseFloat(data.budget) || 0,
-      status: data.status || 'pending',
       notes: data.notes || ''
     };
     app.state.destinations.push(dest);
@@ -242,9 +235,6 @@ app.modules.destinations = {
           <label>计划返回日期</label>
           <input type="date" id="f_end" value="${d.endDate || ''}" />
         </div>
-        <div class="form-field" style="display:flex;align-items:flex-end">
-          <div class="text-xs text-slate-500">出行天数按起止日期自动计算：<strong id="f_days_preview">${app.dateDiff(d.startDate, d.endDate)}</strong> 天</div>
-        </div>
         <div class="form-field">
           <label>同行人数</label>
           <input type="number" id="f_travelers" value="${d.travelers || ''}" min="1" />
@@ -252,14 +242,6 @@ app.modules.destinations = {
         <div class="form-field">
           <label>整体预估总预算 (¥)</label>
           <input type="number" id="f_budget" value="${d.budget || ''}" min="0" />
-        </div>
-        <div class="form-field">
-          <label>行程状态</label>
-          <select id="f_status">
-            <option value="pending" ${d.status === 'pending' || !d.status ? 'selected' : ''}>待规划</option>
-            <option value="planning" ${d.status === 'planning' ? 'selected' : ''}>规划中</option>
-            <option value="completed" ${d.status === 'completed' ? 'selected' : ''}>已完成</option>
-          </select>
         </div>
         <div class="form-field col-span-full">
           <label>备注</label>
@@ -271,11 +253,6 @@ app.modules.destinations = {
       { text: '取消', class: 'btn btn-ghost', action: 'app.closeModal()' },
       { text: '保存', class: 'btn btn-primary', action: `app.modules.destinations.save('${d.id || ''}')` }
     ]);
-    // 起止日期变化时实时预览天数
-    const up = () => { const p = document.getElementById('f_days_preview'); if (p) p.textContent = app.dateDiff(document.getElementById('f_start').value, document.getElementById('f_end').value); };
-    const se = document.getElementById('f_start'), ee = document.getElementById('f_end');
-    if (se) se.addEventListener('change', up);
-    if (ee) ee.addEventListener('change', up);
   },
 
   save(id) {
@@ -288,7 +265,6 @@ app.modules.destinations = {
       endDate: document.getElementById('f_end').value,
       travelers: parseInt(document.getElementById('f_travelers').value) || 0,
       budget: parseFloat(document.getElementById('f_budget').value) || 0,
-      status: document.getElementById('f_status').value,
       notes: document.getElementById('f_notes').value.trim()
     };
 

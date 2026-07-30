@@ -387,7 +387,7 @@ table.data-table tr:hover td { background: #f8fafc; }
 }
 .tl-hour { position: relative; height: var(--tl-hour, 44px); }
 .tl-label {
-  position: absolute; left: 4px; top: -0.55em;
+  position: absolute; left: 4px; top: 2px;
   font-size: 0.62rem; color: #94a3b8; background: #fff; padding: 0 3px; z-index: 2;
 }
 .tl-drop-line {
@@ -402,31 +402,42 @@ table.data-table tr:hover td { background: #f8fafc; }
 }
 .tl-block {
   position: absolute; left: 52px; right: 8px;
-  border-radius: 0.5rem; padding: 5px 9px; overflow: hidden;
+  border-radius: 0.5rem; padding: 4px 8px 4px 4px; overflow: hidden;
   cursor: grab; box-shadow: 0 1px 3px rgba(0,0,0,.10);
   border-left: 4px solid #64748b; background: #f8fafc;
   display: flex; gap: 6px; align-items: stretch;
 }
 .tl-block:active { cursor: grabbing; }
 .tl-block.dragging { opacity: 0.4; }
-.tl-block-bar { width: 3px; border-radius: 2px; background: rgba(0,0,0,.12); flex: none; }
-.tl-block-main { min-width: 0; flex: 1; }
+.tl-block-main { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; }
 .tl-block-title {
   font-weight: 600; font-size: 0.8rem; line-height: 1.15; color: #0f172a;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .tl-block-time { font-size: 0.66rem; color: #475569; margin-top: 1px; }
-.tl-block-cat {
-  display: inline-block;
-  font-size: 0.58rem; font-weight: 700; line-height: 1.1;
-  padding: 0 0.3rem; border-radius: 0.25rem; margin-bottom: 1px;
+.tl-flags { margin-top: 1px; }
+/* 分类小字：置于行程块左侧，竖排显示 */
+.tl-block-cat-v {
+  flex: none;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  display: flex; align-items: center; justify-content: center;
+  width: 15px;
+  font-size: 0.58rem; font-weight: 700; line-height: 1;
+  border-radius: 0.25rem; padding: 2px 0;
 }
-.blk-restaurant .tl-block-cat { color:#ef4444; background: rgba(239,68,68,.14); }
-.blk-hotel      .tl-block-cat { color:#a855f7; background: rgba(168,85,247,.14); }
-.blk-spot       .tl-block-cat { color:#3b82f6; background: rgba(59,130,246,.14); }
-.blk-transport  .tl-block-cat { color:#0891b2; background: rgba(8,145,178,.14); }
-.blk-shopping   .tl-block-cat { color:#ea580c; background: rgba(234,88,12,.14); }
-.blk-other      .tl-block-cat { color:#475569; background: rgba(71,85,105,.14); }
+.blk-restaurant .tl-block-cat-v { color:#ef4444; background: rgba(239,68,68,.14); }
+.blk-hotel      .tl-block-cat-v { color:#a855f7; background: rgba(168,85,247,.14); }
+.blk-spot       .tl-block-cat-v { color:#3b82f6; background: rgba(59,130,246,.14); }
+.blk-transport  .tl-block-cat-v { color:#0891b2; background: rgba(8,145,178,.14); }
+.blk-shopping   .tl-block-cat-v { color:#ea580c; background: rgba(234,88,12,.14); }
+.blk-other      .tl-block-cat-v { color:#475569; background: rgba(71,85,105,.14); }
+/* 短行程块（<1h / <0.5h）精简显示，避免文字被截断 */
+.tl-short { padding: 3px 7px 3px 4px; }
+.tl-short .tl-flag { display: none; }
+.tl-short .tl-block-title { font-size: 0.74rem; line-height: 1.1; }
+.tl-short .tl-block-time { font-size: 0.62rem; }
+.tl-xshort .tl-block-time { display: none; }
 .tl-flag {
   display: inline-block; font-size: 0.6rem; background: #fef3c7; color: #92400e;
   border-radius: 999px; padding: 0 0.35rem; margin-left: 4px; vertical-align: middle;
