@@ -16,6 +16,14 @@ services:
       # 即可在重部署/休眠后保留数据，且零外部 API 调用（不再用 GitHub Gist，避免触发限流）。
       - key: DATA_DIR
         value: /data
+      # 一次性迁移（可选）：若希望服务器在「持久磁盘首次为空」时自动从旧 GitHub Gist 导入数据，
+      # 可临时在此填入 GIST_ID 与 GITHUB_TOKEN（与下方同名）。导入成功后即可删除这两个变量，
+      # 日常运行不再访问 GitHub（零外部 API 调用）。若已撤销 token / 不想用此方式，
+      # 改用 tools/migrate-gist-to-disk.js 生成仓库根 seed-board.json 提交即可（同样只导入一次）。
+      - key: GIST_ID
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
       # PORT 由 Render 自动注入，server.js 已通过 process.env.PORT 读取，无需设置
     disks:
       - name: travel-data
