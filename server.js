@@ -221,8 +221,10 @@ const server = http.createServer(async (req, res) => {
   if (pathname.startsWith('/api/')) {
     // 健康检查
     if (pathname === '/api/health' && req.method === 'GET') {
+      const disk = checkStorage();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, online: sseClients.size, storage: 'local', disk: checkStorage() }));
+      // persistent=true 才表示「写入会跨部署保留」；false 说明后端虽开，但 /data 不是真实持久磁盘，数据会随重新部署清空。
+      res.end(JSON.stringify({ ok: true, online: sseClients.size, storage: 'local', disk, persistent: disk.mounted }));
       return;
     }
 
@@ -301,12 +303,23 @@ const server = http.createServer(async (req, res) => {
 
 async function boot() {
   await loadBoard();
+  const ds = checkStorage();
+  const backendOn = process.env.BOARD_BACKEND === '1' || ds.mounted;
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ 旅行规划工作台后端已启动： http://localhost:${PORT}`);
     console.log(`   密码保护：单密码（环境变量 BOARD_PASSWORD，默认 "travel2026"）`);
-    console.log(`   永久存储：本地文件 ${BOARD_FILE}（免费实例无持久磁盘，部署即清空；前端默认用浏览器 localStorage。付费实例挂磁盘+BOARD_BACKEND=1 才跨部署保留）`);
-    const ds = checkStorage();
-    console.log(`   磁盘自检：${ds.mounted ? '✅ 已挂载持久磁盘到 ' + DATA_DIR : '⚠️ 未检测到独立磁盘挂载（写入将是临时目录、部署即清空）'} | 可写=${ds.writable}`);
+    if (backendOn) {
+      if (ds.mounted) {
+        console.log(`   ✅ 永久存储：写入 ${BOARD_FILE}（已挂载持久磁盘 ${DATA_DIR}，跨部署/重启保留）`);
+      } else {
+        console.log(`   ⚠️⚠️ 持久化风险：后端已启用，但 ${DATA_DIR} 不是「持久磁盘挂载点」(checkStorage.mounted=false)！`);
+        console.log(`      当前写入 ${BOARD_FILE} 实际位于临时文件系统，每次「重新部署/重启」都会清空 → 数据会丢失。`);
+        console.log(`      请在 Render 控制台确认 travel-data 磁盘已「挂载到本服务」且挂载路径为 /data，然后重新部署。`);
+      }
+    } else {
+      console.log(`   本地存储：后端未启用，前端使用浏览器 localStorage（不跨设备、清缓存即丢）`);
+    }
+    console.log(`   磁盘自检：dataDir=${ds.dataDir} | 已挂载持久磁盘=${ds.mounted} | 可写=${ds.writable}`);
     console.log(`   多人实时：SSE /api/stream`);
   });
 }
