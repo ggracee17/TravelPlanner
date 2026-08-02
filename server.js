@@ -227,7 +227,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/config.js') {
     const base = process.env.BOARD_BASE || '';
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-    res.end(`window.BOARD_CONFIG = { enabled: true, base: ${JSON.stringify(base)}, storage: 'local' };`);
+    res.end(`window.BOARD_CONFIG = { enabled: true, base: ${JSON.stringify(base)}, storage: 'local', gmapsApiKey: ${JSON.stringify(process.env.GMAPS_API_KEY || '')} };`);
     return;
   }
 

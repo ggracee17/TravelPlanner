@@ -16,6 +16,12 @@ services:
       # 即可在重部署/休眠后保留数据，且零外部 API 调用（不再用 GitHub Gist，避免触发限流）。
       - key: DATA_DIR
         value: /data
+      # Google Maps API Key（密钥）：后端从环境变量读取，并注入前端 window.BOARD_CONFIG.gmapsApiKey
+      # （见 server.js 的 /config.js 与 module-map.js 的 gmapsKey()）。请勿在源码里硬编码 Key。
+      # 建议同步在 Google Cloud 对该 Key 设置「API 限制」(仅 Maps JS API + Geocoding API) 与
+      # 「应用限制」(HTTP 引荐来源限制为本站域名)，避免被盗刷产生费用。
+      - key: GMAPS_API_KEY
+        sync: false
       # 一次性迁移（可选）：若希望服务器在「持久磁盘首次为空」时自动从旧 GitHub Gist 导入数据，
       # 可临时在此填入 GIST_ID 与 GITHUB_TOKEN（与下方同名）。导入成功后即可删除这两个变量，
       # 日常运行不再访问 GitHub（零外部 API 调用）。若已撤销 token / 不想用此方式，

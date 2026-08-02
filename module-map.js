@@ -6,11 +6,16 @@
    未填则按「名称 + 地址」通过 Google Geocoding 自动定位，并回写保存。
    无 API Key / 加载失败时降级为地点列表。
 
-   使用前：在下方 GMAPS_API_KEY 填入你的 Google Maps API Key
-   （需在 Google Cloud 控制台启用 Maps JavaScript API 与 Geocoding API）。
+   API Key 由后端从环境变量 GMAPS_API_KEY 注入（见 server.js 的 /config.js 与 render.yaml），
+   本文件不再硬编码，避免密钥进入 git 仓库。本地无后端时为空，地图自动降级为地点列表。
+   （需在 Google Cloud 控制台启用 Maps JavaScript API 与 Geocoding API，并建议对 Key 加
+    HTTP 引用限制 + API 限制，避免被盗刷。）
    ============================================================ */
 
-const GMAPS_API_KEY = ''; // ← 在此粘贴你的 Google Maps API Key
+// 从后端注入的配置读取 Key（window.BOARD_CONFIG.gmapsApiKey），不再硬编码。
+function gmapsKey() {
+  return (typeof window !== 'undefined' && window.BOARD_CONFIG && window.BOARD_CONFIG.gmapsApiKey) || '';
+}
 
 const MAP_COLORS = {
   restaurant: '#ef4444', hotel: '#a855f7', spot: '#3b82f6',
@@ -99,7 +104,7 @@ app.modules.map = {
 
   /* 动态加载 Google Maps JS API（仅需一次） */
   ensureMaps(cb) {
-    if (!GMAPS_API_KEY) { this._failed = false; cb(); return; }
+    if (!gmapsKey()) { this._failed = false; cb(); return; }
     if (typeof window !== 'undefined' && window.google && window.google.maps) { cb(); return; }
     if (this._loading) { this._cbs.push(cb); return; }
     this._loading = true; this._cbs = [cb];
@@ -112,7 +117,7 @@ app.modules.map = {
       try { delete win[cbName]; } catch (e) {}
     };
     const s = document.createElement('script');
-    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(GMAPS_API_KEY) + '&callback=' + cbName;
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(gmapsKey()) + '&callback=' + cbName;
     s.async = true;
     s.onerror = () => {
       this._loading = false; this._failed = true;
@@ -125,7 +130,7 @@ app.modules.map = {
   /* Google 地理编码：名称/地址 → 坐标 */
   geocode(q) {
     return new Promise((resolve) => {
-      if (!GMAPS_API_KEY || typeof window === 'undefined' || !window.google || !window.google.maps || !window.google.maps.Geocoder) { resolve(null); return; }
+      if (!gmapsKey() || typeof window === 'undefined' || !window.google || !window.google.maps || !window.google.maps.Geocoder) { resolve(null); return; }
       try {
         const geocoder = new window.google.maps.Geocoder();
         geocoder.geocode({ address: q }, (results, status) => {
@@ -146,10 +151,10 @@ app.modules.map = {
 
   async showMap() {
     const items = this.collectSpots(this._sel());
-    if (!GMAPS_API_KEY || this._failed || typeof window === 'undefined' || !window.google || !window.google.maps) {
+    if (!gmapsKey() || this._failed || typeof window === 'undefined' || !window.google || !window.google.maps) {
       const located = items.filter(it => it.spot.lat != null && it.spot.lng != null);
       this.renderList(items, located);
-      if (!GMAPS_API_KEY) this._noteNeedKey();
+      if (!gmapsKey()) this._noteNeedKey();
       else if (this._failed) this._noteMapFallback();
       return;
     }
@@ -227,7 +232,7 @@ app.modules.map = {
 
   _noteNeedKey() {
     const view = document.getElementById('mapView');
-    if (view) view.innerHTML = '<div class="map-fallback">⚠️ 尚未配置 Google Maps API Key。请在 <code>module-map.js</code> 顶部的 <code>GMAPS_API_KEY</code> 填入你的 Key（需在 Google Cloud 启用 Maps JavaScript API 与 Geocoding API），刷新后即可显示地图。下方列表仍可正常查看地点。</div>';
+    if (view) view.innerHTML = '<div class="map-fallback">⚠️ 尚未配置 Google Maps API Key。请到 Render 控制台给本服务添加环境变量 <code>GMAPS_API_KEY</code>（后端会自动注入前端），并在 Google Cloud 启用 <b>Maps JavaScript API</b> 与 <b>Geocoding API</b>，重新部署后刷新即可显示地图。下方列表仍可正常查看地点。</div>';
   },
 
   _noteMapFallback() {
