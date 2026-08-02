@@ -5,8 +5,9 @@
  *   1) 成功计算：spots[1]/spots[2] 拿到交通时间，spots[0]（第一天首站）无「距上一站」；
  *   2) 无 API Key 守卫：直接报错且不改动已有数据；
  *   3) clearTravelForDay：任何结构变更后交通时间被清除；
- *   4) moveSpotToTime 后交通时间被清除；
- *   5) 地理编码兜底：缺坐标的行程块会先按名称地理编码，再参与计算。
+ *   4) moveSpotToTime 后：有 Key 自动重算、无 Key 清除；
+ *   5) 地理编码兜底：缺坐标的行程块会先按名称地理编码，再参与计算；
+ *   6) computeTravelAll：一次性重算所有天。
  */
 'use strict';
 const fs = require('fs');
@@ -116,15 +117,27 @@ function assert(cond, msg) {
     assert(dumpDay(app).every(v => v === 'null'), '整天的交通时间被清空');
   }
 
-  // ===== 测试 4：moveSpotToTime 后清除 =====
-  console.log('\n[测试4] 拖动改时间后，相关段交通时间被清除');
+  // ===== 测试 4：moveSpotToTime 后：有 Key 自动重算、无 Key 清除 =====
+  console.log('\n[测试4] 拖动改时间后：配置了 Key 即自动重算，无 Key 则清除');
   {
-    const { app } = makeClient({ key: 'test' });
+    const google = { maps: { DistanceMatrixService: FakeService, TravelMode: { TRANSIT: 'TRANSIT' }, UnitSystem: { METRIC: 'METRIC' } } };
+    const { app } = makeClient({ key: 'test', google });
     app.state.d1.itinerary[0].spots[0].travelFromPrev = { mode: 'transit', durText: 'a' };
     app.state.d1.itinerary[0].spots[1].travelFromPrev = { mode: 'transit', durText: 'b' };
     app.modules.itinerary.moveSpotToTime('s2', 'day1', '10:00');
     const day = dumpDay(app);
-    assert(day[0] === 'null' && day[1] === 'null' && day[2] === 'null', '移动后所有交通时间被清除（待重算）');
+    console.log('  有 Key 拖动后 =', JSON.stringify(day));
+    assert(day[0] === 'null', '首站无「距上一站」');
+    assert(day[1] === '12分钟|transit', '有 Key：拖动后第二站自动重算拿到交通时间');
+    assert(day[2] === '12分钟|transit', '有 Key：拖动后第三站自动重算拿到交通时间');
+  }
+  {
+    const { app } = makeClient({ key: '' });
+    app.state.d1.itinerary[0].spots[0].travelFromPrev = { mode: 'transit', durText: 'a' };
+    app.state.d1.itinerary[0].spots[1].travelFromPrev = { mode: 'transit', durText: 'b' };
+    app.modules.itinerary.moveSpotToTime('s2', 'day1', '10:00');
+    const day = dumpDay(app);
+    assert(day[0] === 'null' && day[1] === 'null' && day[2] === 'null', '无 Key：拖动后清除交通时间（待手动重算）');
   }
 
   // ===== 测试 5：地理编码兜底（缺坐标先按名称定位）=====
@@ -141,6 +154,27 @@ function assert(cond, msg) {
     const s2 = app.state.d1.itinerary[0].spots[1];
     assert(s2.lat === 99.9 && s2.lng === 88.8, 's2 被地理编码补上了坐标');
     assert(s2.travelFromPrev && s2.travelFromPrev.durText === '12分钟', '补坐标后 s2 仍正常计算出交通时间');
+  }
+
+  // ===== 测试 6：computeTravelAll 一次性重算所有天 =====
+  console.log('\n[测试6] computeTravelAll 一次性重算所有天的交通时间');
+  {
+    const google = { maps: { DistanceMatrixService: FakeService, TravelMode: { TRANSIT: 'TRANSIT' }, UnitSystem: { METRIC: 'METRIC' } } };
+    const { app } = makeClient({ key: 'test', google });
+    // 追加第二天（≥2 个行程块）
+    app.state.d1.itinerary.push({
+      id: 'day2', date: '2026-01-02', weather: '',
+      spots: [
+        { id: 's4', name: 'D', type: 'spot', startTime: '09:00', durationH: 2, lat: 25.06, lng: 121.59, travelFromPrev: null },
+        { id: 's5', name: 'E', type: 'spot', startTime: '12:00', durationH: 2, lat: 25.07, lng: 121.60, travelFromPrev: null }
+      ]
+    });
+    await app.modules.itinerary.computeTravelAll();
+    const d1 = dumpDay(app);
+    const d2 = app.state.d1.itinerary[1].spots.map(s => s.travelFromPrev ? (s.travelFromPrev.durText + '|' + s.travelFromPrev.mode) : 'null');
+    console.log('  day1 =', JSON.stringify(d1), ' day2 =', JSON.stringify(d2));
+    assert(d1[1] === '12分钟|transit' && d1[2] === '12分钟|transit', '第一天被重算');
+    assert(d2[1] === '12分钟|transit', '第二天被重算');
   }
 
   console.log('\n========== 结果: ' + passed + ' 通过, ' + failed + ' 失败 ==========');

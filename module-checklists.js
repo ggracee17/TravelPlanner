@@ -110,8 +110,6 @@ app.modules.checklists = {
           <span>📄 证件手续清单（已勾选 ${docsChecked} / ${docs.length}）</span>
           <div class="ml-auto flex gap-2">
             <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addDoc()">➕ 新增项</button>
-            <button class="btn btn-success btn-sm" onclick="app.modules.checklists.checkAll('documents')">✓ 全部勾选</button>
-            <button class="btn btn-warning btn-sm" onclick="app.modules.checklists.uncheckAll('documents')">○ 全部取消勾选</button>
           </div>
         </div>
         <div id="docList">
@@ -125,9 +123,6 @@ app.modules.checklists = {
           <span>🧳 行李打包清单（已勾选 ${lugChecked} / ${lug.length}）</span>
           <div class="ml-auto flex gap-2">
             <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addLug()">➕ 新增项</button>
-            <button class="btn btn-success btn-sm" onclick="app.modules.checklists.checkAll('luggage')">✓ 全部勾选</button>
-            <button class="btn btn-warning btn-sm" onclick="app.modules.checklists.autoAdjustLug()">🤖 按气候自动调整</button>
-            <button class="btn btn-ghost btn-sm" onclick="app.modules.checklists.uncheckAll('luggage')">○ 全部取消勾选</button>
           </div>
         </div>
         <p class="text-tiny text-slate-500 mb-2">已按品类分组：衣物 / 洗护 / 电子设备 / 药品 / 随身杂物</p>
@@ -249,21 +244,6 @@ app.modules.checklists = {
     this.render();
   },
 
-  uncheckAll(type) {
-    if (!confirm('确定取消所有勾选？')) return;
-    app.state.checklists[type].forEach(x => x.checked = false);
-    app.saveState();
-    this.render();
-  },
-
-  checkAll(type) {
-    const label = type === 'documents' ? '证件' : '行李';
-    if (!confirm('确定勾选全部' + label + '项？')) return;
-    app.state.checklists[type].forEach(x => x.checked = true);
-    app.saveState();
-    this.render();
-  },
-
   reset() {
     if (!confirm('确定删除当前全部清单并恢复「初始默认清单」？此操作不可撤销。')) return;
     // 直接以源码里的干净默认值覆盖（无论当前是否为空/是否含乱码），保存即把损坏数据清掉。
@@ -298,92 +278,6 @@ app.modules.checklists = {
       suggestion = `⛅ 温和气候（${place} ${month}月）——气温 15-25℃，建议：长袖+薄外套、薄毛衣、长裤、舒适步行鞋`;
     }
     return suggestion;
-  },
-
-  /* ===== 按气候自动调整清单 ===== */
-  autoAdjustLug() {
-    const d = app.getActiveDestination();
-    if (!d) return app.toast('请先在板块1选择目的地', 'warning');
-    const climate = this.suggestClimate(app.destName(d), d.startDate);
-    const lug = app.state.checklists.luggage;
-
-    // 根据建议自动勾选 / 新增项
-    const climateItems = {
-      '热带': [
-        { name: '轻薄速干短袖 × 3', cat: '衣物' },
-        { name: '泳衣 / 沙滩裤', cat: '衣物' },
-        { name: '凉鞋 / 拖鞋', cat: '衣物' },
-        { name: '高倍防晒霜（SPF50+）', cat: '洗护' },
-        { name: '驱蚊水（热带必备）', cat: '药品' },
-        { name: '防中暑药 / 藿香正气', cat: '药品' }
-      ],
-      '寒冷': [
-        { name: '厚羽绒服 / 派克大衣', cat: '衣物' },
-        { name: '保暖内衣套装 × 2', cat: '衣物' },
-        { name: '雪地靴 / 防水靴', cat: '衣物' },
-        { name: '毛线帽 + 围巾 + 手套', cat: '衣物' },
-        { name: '暖宝宝 × 10', cat: '随身杂物' },
-        { name: '润唇膏（防干裂）', cat: '洗护' }
-      ],
-      '炎热': [
-        { name: '短袖 × 4', cat: '衣物' },
-        { name: '防晒衣 / 防晒伞', cat: '衣物' },
-        { name: '太阳镜 + 遮阳帽', cat: '衣物' },
-        { name: '补水喷雾', cat: '洗护' },
-        { name: '便携小风扇', cat: '电子设备' }
-      ],
-      '温和': [
-        { name: '长袖 + 薄毛衣', cat: '衣物' },
-        { name: '薄款防风外套', cat: '衣物' },
-        { name: '长裤 / 牛仔裤', cat: '衣物' },
-        { name: '折叠雨伞', cat: '随身杂物' }
-      ],
-      '湿热': [
-        { name: '速干短袖 × 4', cat: '衣物' },
-        { name: '速干短裤 / 薄长裤', cat: '衣物' },
-        { name: '防晒衣 / 薄外套（防晒+空调）', cat: '衣物' },
-        { name: '凉鞋 / 透气运动鞋', cat: '衣物' },
-        { name: '薄睡衣', cat: '衣物' },
-        { name: '高倍防晒霜（SPF50+）', cat: '洗护' },
-        { name: '补水喷雾 / 保湿', cat: '洗护' },
-        { name: '便携小风扇', cat: '电子设备' },
-        { name: '驱蚊水（湿热蚊虫多）', cat: '药品' },
-        { name: '肠胃药 + 止泻药（注意饮食卫生）', cat: '药品' },
-        { name: '防中暑药 / 藿香正气', cat: '药品' },
-        { name: '折叠雨伞 / 雨衣（台风阵雨）', cat: '随身杂物' },
-        { name: '防水文件袋（护证件手机）', cat: '随身杂物' },
-        { name: '手机防水袋', cat: '随身杂物' },
-        { name: '水壶', cat: '随身杂物' }
-      ]
-    };
-
-    let addType = '温和';
-    if (climate.includes('热带')) addType = '热带';
-    else if (climate.includes('寒冷')) addType = '寒冷';
-    else if (climate.includes('湿热') || climate.includes('台风')) addType = '湿热';
-    else if (climate.includes('炎热')) addType = '炎热';
-
-    const toAdd = climateItems[addType] || [];
-    const existing = new Set(lug.map(x => x.name));
-    let added = 0;
-    toAdd.forEach(it => {
-      if (!existing.has(it.name)) {
-        lug.push({ id: 'ck_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), ...it, checked: false });
-        added++;
-      }
-    });
-
-    // 自动勾选通用项
-    const always = ['护照包 / 文件袋', '充电宝（≤ 20000mAh, 民航规定）', '手机 + 充电线', '雨伞 / 雨衣'];
-    let checked = 0;
-    always.forEach(n => {
-      const it = lug.find(x => x.name === n);
-      if (it && !it.checked) { it.checked = true; checked++; }
-    });
-
-    app.saveState();
-    this.render();
-    app.toast(`🤖 ${climate}  → 新增 ${added} 项，自动勾选通用项 ${checked} 项`, 'success', 5000);
   },
 
   /* ===== 导出 Excel ===== */

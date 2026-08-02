@@ -211,7 +211,6 @@ const server = http.createServer(async (req, res) => {
     // 避免「部署后仍是本地模式、不弹密码、不显示在线人数、跨设备看不到数据」的坑。
     // 免费实例无持久磁盘 → ds.mounted 为 false 且无 BOARD_BACKEND → 走 localStorage 本地模式（安全）。
     const backendEnabled = process.env.BOARD_BACKEND === '1' || ds.mounted;
-    console.log(`[config] 后端模式=${backendEnabled} (BOARD_BACKEND=${process.env.BOARD_BACKEND || '(空)'}, 磁盘挂载=${ds.mounted})`);
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
     res.end(`window.BOARD_CONFIG = { enabled: ${backendEnabled}, base: ${JSON.stringify(base)}, storage: 'local', gmapsApiKey: ${JSON.stringify(process.env.GMAPS_API_KEY || '')} };`);
     return;
