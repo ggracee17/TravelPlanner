@@ -298,11 +298,15 @@ app.modules.map = {
       const nameHtml = url
         ? `<a href="${url}" target="_blank" rel="noopener" class="text-sm font-semibold truncate text-sky-700 hover:underline">${this._esc(s.name || '未命名')}</a>`
         : `<span class="text-sm font-semibold truncate">${this._esc(s.name || '未命名')}</span>`;
+      // 仅在「既没坐标、也没有地图链接」时提示未定位；已有链接的地点不再显示多余说明
+      const hint = (!located && !s.mapUrl)
+        ? `<div class="text-tiny text-amber-600 truncate">${app.t('map.unlocated')}</div>`
+        : '';
       return `<div class="p-2 rounded border border-slate-200 flex items-start gap-2 ${located ? '' : 'opacity-60'}">
         <span style="width:10px;height:10px;border-radius:999px;background:${color};margin-top:5px;flex:none"></span>
         <div class="min-w-0">
           <div class="truncate">${dayTag}${nameHtml} <span class="text-tiny text-slate-400">${s.startTime || ''}</span></div>
-          <div class="text-tiny text-slate-500 truncate">${located ? '' : (s.mapUrl ? '· <span class="text-sky-600">🔗 ' + app.t('map.linked') + '</span>' : '· <span class="text-amber-600">' + app.t('map.unlocated') + '</span>')}</div>
+          ${hint}
         </div>
       </div>`;
     }).join('') + `</div>`;
