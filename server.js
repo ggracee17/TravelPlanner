@@ -14,7 +14,19 @@ const crypto = require('crypto');
 
 const ROOT = __dirname;
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
+// 数据目录：Render 持久磁盘约定挂载在 /data。若启动时检测到 /data 是独立挂载点（磁盘已挂），
+// 强制用 /data——避免环境变量 DATA_DIR 未正确注入（Render Blueprint 不覆盖控制台手动设过的同名值）时，
+// 落到临时目录导致数据跨部署丢失。无磁盘时退回环境变量或默认 ./data。
+const DATA_DIR = (() => {
+  try {
+    if (fs.existsSync('/proc/mounts')) {
+      const isDataMount = fs.readFileSync('/proc/mounts', 'utf8').split('\n')
+        .some(l => { const p = l.split(' '); return p[1] === '/data'; });
+      if (isDataMount) return '/data';
+    }
+  } catch (e) {}
+  return process.env.DATA_DIR || path.join(ROOT, 'data');
+})();
 const BOARD_FILE = path.join(DATA_DIR, 'board.json');
 const SECRET_FILE = path.join(DATA_DIR, 'secret.txt');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
