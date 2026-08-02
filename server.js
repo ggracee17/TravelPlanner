@@ -55,6 +55,28 @@ let boardState = null;        // 完整 app.state 对象，或 null（尚未有�
 let boardSig = '';            // 当前看板的规范化签名，用于去重广播
 let writeChain = Promise.resolve(); // 序列化写操作，避免并发交错
 
+// 存储诊断：确认持久磁盘是否已真正挂载到 DATA_DIR（而非临时根目录）。
+// 关键判据：读 /proc/mounts 看 DATA_DIR 是否作为独立挂载点出现——
+// 持久磁盘挂上后是独立 mount 项；若只是启动时 mkdir 出来的临时目录，则不会单独出现。
+function checkStorage() {
+  const info = { dataDir: DATA_DIR, exists: false, writable: false, mounted: false, mountLine: '' };
+  try {
+    info.exists = fs.existsSync(DATA_DIR) && fs.statSync(DATA_DIR).isDirectory();
+  } catch (e) {}
+  try {
+    const probe = path.join(DATA_DIR, '.probe_' + Date.now());
+    fs.writeFileSync(probe, 'ok');
+    fs.unlinkSync(probe);
+    info.writable = true;
+  } catch (e) {}
+  try {
+    const mounts = fs.readFileSync('/proc/mounts', 'utf8').split('\n');
+    const hit = mounts.find(l => { const p = l.split(' '); return p[1] === DATA_DIR; });
+    if (hit) { info.mounted = true; info.mountLine = hit; }
+  } catch (e) {}
+  return info;
+}
+
 function loadBoard() {
   return (async () => {
     try {
@@ -183,7 +205,7 @@ const server = http.createServer(async (req, res) => {
     // 健康检查
     if (pathname === '/api/health' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, online: sseClients.size, storage: 'local' }));
+      res.end(JSON.stringify({ ok: true, online: sseClients.size, storage: 'local', disk: checkStorage() }));
       return;
     }
 
@@ -265,6 +287,8 @@ async function boot() {
     console.log(`✅ 旅行规划工作台后端已启动： http://localhost:${PORT}`);
     console.log(`   密码保护：单密码（环境变量 BOARD_PASSWORD，默认 "travel2026"）`);
     console.log(`   永久存储：本地文件 ${BOARD_FILE}（免费实例无持久磁盘，部署即清空；前端默认用浏览器 localStorage。付费实例挂磁盘+BOARD_BACKEND=1 才跨部署保留）`);
+    const ds = checkStorage();
+    console.log(`   磁盘自检：${ds.mounted ? '✅ 已挂载持久磁盘到 ' + DATA_DIR : '⚠️ 未检测到独立磁盘挂载（写入将是临时目录、部署即清空）'} | 可写=${ds.writable}`);
     console.log(`   多人实时：SSE /api/stream`);
   });
 }
