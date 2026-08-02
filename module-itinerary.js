@@ -221,12 +221,12 @@ app.modules.itinerary = {
            onclick="app.modules.itinerary.openTripForm('spot','${day.id}','${s.id}')"
            title="${title}">
         <div class="tl-block-cat-v">${meta.label}</div>
-        <div class="tl-block-main">
-          <div class="tl-block-title">${s.name || '未命名'}</div>
-          ${isXShort ? '' : `<div class="tl-block-time">${s.startTime || '--:--'}–${itinEndTime(s.startTime, dur)} · ${dur}h</div>`}
-          ${flags ? `<div class="tl-flags">${flags}</div>` : ''}
-          ${!isXShort && s.travelFromPrev ? `<div class="tl-travel">${this.travelIcon(s.travelFromPrev.mode)} ${s.travelFromPrev.durText}${s.travelFromPrev.distText ? ' · ' + s.travelFromPrev.distText : ''}${s.travelFromPrev.unavailable ? '（无法计算）' : '　距上一站'}</div>` : ''}
-        </div>
+      <div class="tl-block-main">
+        ${!isXShort && s.travelFromPrev ? `<div class="tl-travel">${this.travelIcon(s.travelFromPrev.mode)} ${s.travelFromPrev.durText}${s.travelFromPrev.distText ? ' · ' + s.travelFromPrev.distText : ''}${s.travelFromPrev.unavailable ? '（无法计算）' : '　距上一站'}</div>` : ''}
+        <div class="tl-block-title">${s.name || '未命名'}</div>
+        ${isXShort ? '' : `<div class="tl-block-time">${s.startTime || '--:--'}–${itinEndTime(s.startTime, dur)} · ${dur}h</div>`}
+        ${flags ? `<div class="tl-flags">${flags}</div>` : ''}
+      </div>
       </div>`;
   },
 
