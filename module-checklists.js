@@ -79,6 +79,12 @@ app.modules.checklists = {
     const lug = app.state.checklists.luggage || [];
     const docsChecked = docs.filter(x => x.checked).length;
     const lugChecked = lug.filter(x => x.checked).length;
+    // 乱码自检：若清单项名称含替换字符 U+FFFD（典型表现：括号前出现一堆 □），提示一键重置清理
+    const hasMojibake = [...docs, ...lug].some(x => x.name && x.name.indexOf('\uFFFD') >= 0);
+    if (hasMojibake && !this._warnedMojibake) {
+      this._warnedMojibake = true;
+      app.toast('检测到清单含乱码字符（如「\uFFFD」），点顶部「🔄 重置默认清单」可一键清理并恢复初始清单', 'warning', 7000);
+    }
     const d = app.getActiveDestination();
     const climate = d ? this.suggestClimate(app.destName(d), d.startDate) : '请先在板块1选择目的地';
 
@@ -104,6 +110,7 @@ app.modules.checklists = {
           <span>📄 证件手续清单（已勾选 ${docsChecked} / ${docs.length}）</span>
           <div class="ml-auto flex gap-2">
             <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addDoc()">➕ 新增项</button>
+            <button class="btn btn-success btn-sm" onclick="app.modules.checklists.checkAll('documents')">✓ 全部勾选</button>
             <button class="btn btn-warning btn-sm" onclick="app.modules.checklists.uncheckAll('documents')">○ 全部取消勾选</button>
           </div>
         </div>
@@ -118,6 +125,7 @@ app.modules.checklists = {
           <span>🧳 行李打包清单（已勾选 ${lugChecked} / ${lug.length}）</span>
           <div class="ml-auto flex gap-2">
             <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addLug()">➕ 新增项</button>
+            <button class="btn btn-success btn-sm" onclick="app.modules.checklists.checkAll('luggage')">✓ 全部勾选</button>
             <button class="btn btn-warning btn-sm" onclick="app.modules.checklists.autoAdjustLug()">🤖 按气候自动调整</button>
             <button class="btn btn-ghost btn-sm" onclick="app.modules.checklists.uncheckAll('luggage')">○ 全部取消勾选</button>
           </div>
@@ -248,14 +256,23 @@ app.modules.checklists = {
     this.render();
   },
 
+  checkAll(type) {
+    const label = type === 'documents' ? '证件' : '行李';
+    if (!confirm('确定勾选全部' + label + '项？')) return;
+    app.state.checklists[type].forEach(x => x.checked = true);
+    app.saveState();
+    this.render();
+  },
+
   reset() {
-    if (!confirm('恢复全部默认清单项（已勾选状态重置）？')) return;
-    app.state.checklists = { documents: [], luggage: [] };
-    // 重新初始化
-    const initFunc = arguments.callee;
-    // 直接复用初始化逻辑
-    delete app.state.checklists;
-    location.reload();
+    if (!confirm('确定删除当前全部清单并恢复「初始默认清单」？此操作不可撤销。')) return;
+    // 直接以源码里的干净默认值覆盖（无论当前是否为空/是否含乱码），保存即把损坏数据清掉。
+    app.state.checklists.documents = DEFAULT_DOCS.map(x => ({ ...x }));
+    app.state.checklists.luggage = DEFAULT_LUG.map(x => ({ ...x }));
+    app.saveState();
+    this.render();
+    this._warnedMojibake = false; // 重置后数据已干净，允许下次再提示
+    app.toast('已恢复初始默认清单', 'success');
   },
 
   /* ===== 气候建议 ===== */
