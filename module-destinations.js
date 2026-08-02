@@ -14,7 +14,7 @@ app.modules.home = {
 
     sec.innerHTML = `
       <div class="card">
-        <div class="card-title">🏠 私人旅行工作台 · 总览</div>
+        <div class="card-title">${app.t('dest.homeTitle')}</div>
         <p class="text-sm text-slate-600 mb-4">欢迎使用！本工作台永久保存所有行程资料，6 大核心板块结构固定不可删减。
         <strong class="text-sky-700">左侧目录可随时切换板块</strong>，下方为您的旅行数据总览。</p>
 
@@ -98,9 +98,9 @@ app.modules.destinations = {
     sec.innerHTML = `
       <div class="card">
         <div class="card-title">
-          <span>📍 板块1 · 目的地总览档案库</span>
-          <button class="btn btn-primary ml-auto" onclick="app.modules.destinations.newDest()">➕ 新建目的地档案</button>
-          <button class="btn btn-success" onclick="app.modules.destinations.showImportJSON()">📥 粘贴 AI 建档</button>
+          <span>${app.t('dest.title')}</span>
+          <button class="btn btn-primary ml-auto" onclick="app.modules.destinations.newDest()">${app.t('dest.newBtn')}</button>
+          <button class="btn btn-success" onclick="app.modules.destinations.showImportJSON()">${app.t('dest.aiBtn')}</button>
         </div>
         <p class="text-sm text-slate-600 mb-4">每一个目的地 = 一份独立档案。字段精简为：目的地名称、起止日期（出行天数自动按日期计算）、同行人数、总预算、备注。</p>
 

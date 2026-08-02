@@ -37,8 +37,8 @@ app.modules.candidates = {
     sec.innerHTML = `
       <div class="card">
         <div class="card-title">
-          <span>🧩 板块5 · 行程库</span>
-          <button class="btn btn-primary ml-auto" onclick="app.modules.itinerary.openTripForm('newcand','')">➕ 新增行程库项目</button>
+          <span>${app.t('cand.title')}</span>
+          <button class="btn btn-primary ml-auto" onclick="app.modules.itinerary.openTripForm('newcand','')">${app.t('cand.add')}</button>
         </div>
         <p class="text-sm text-slate-600 mb-4">
           把还在犹豫的餐厅、景点、住宿等先记在这里，并填好<strong class="text-sky-700">建议时长</strong>。

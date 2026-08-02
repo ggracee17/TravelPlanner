@@ -95,6 +95,11 @@ function userFromToken(token) {
   return sig === expected ? username : null;
 }
 
+// 管理员判定：迁移出的 owner 账号（含已部署、accounts.json 无 admin 字段的情况）即为管理员。
+function isAdmin(u) {
+  return !!(accounts[u] && (accounts[u].admin === true || u === 'owner'));
+}
+
 function defaultState() {
   return {
     destinations: [], activeDestinationId: null, candidates: [], searchHistory: [],
@@ -363,6 +368,74 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 修改密码（需鉴权 + 校验旧密码）：改密后旧 token 因 HMAC 含 pwHash 自动失效，返回新 token
+    if (pathname === '/api/change-password' && req.method === 'POST') {
+      const username = userFromToken(extractToken(req, urlObj));
+      if (!username) { res.writeHead(401); res.end(JSON.stringify({ error: '未授权' })); return; }
+      try {
+        const body = await readBody(req);
+        const { oldPassword, newPassword } = JSON.parse(body || '{}');
+        const acc = accounts[username];
+        if (!acc || pwHash(oldPassword || '') !== acc.pwHash) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: '旧密码不正确' }));
+          return;
+        }
+        if (!newPassword || String(newPassword).length < 1) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: '新密码不能为空' }));
+          return;
+        }
+        acc.pwHash = pwHash(newPassword);
+        saveAccounts();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, token: tokenFor(username, acc.pwHash) }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: '请求无效' }));
+      }
+      return;
+    }
+
+    // 管理员：列出全部用户名（仅 owner/管理员可调用）
+    if (pathname === '/api/admin/users' && req.method === 'GET') {
+      const username = userFromToken(extractToken(req, urlObj));
+      if (!username || !isAdmin(username)) { res.writeHead(401); res.end(JSON.stringify({ error: '无权限' })); return; }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, users: Object.keys(accounts) }));
+      return;
+    }
+
+    // 管理员：重置任意用户密码（忘记密码的统一入口：联系 owner 重置）
+    if (pathname === '/api/admin/reset-password' && req.method === 'POST') {
+      const username = userFromToken(extractToken(req, urlObj));
+      if (!username || !isAdmin(username)) { res.writeHead(401); res.end(JSON.stringify({ error: '无权限' })); return; }
+      try {
+        const body = await readBody(req);
+        const { target, newPassword } = JSON.parse(body || '{}');
+        const tu = safeUser(target);
+        const tacc = accounts[tu];
+        if (!tacc) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: '目标用户不存在' }));
+          return;
+        }
+        if (!newPassword || String(newPassword).length < 1) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: '新密码不能为空' }));
+          return;
+        }
+        tacc.pwHash = pwHash(newPassword);
+        saveAccounts();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: '请求无效' }));
+      }
+      return;
+    }
+
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'API 不存在' }));
     return;
@@ -382,7 +455,7 @@ function migrateOldBoard() {
     const owner = 'owner';
     const boardFile = path.join(BOARDS_DIR, owner + '.json');
     atomicWrite(boardFile, JSON.stringify(old, null, 2));
-    accounts[owner] = { pwHash: pwHash(BOARD_PASSWORD), boardFile, createdAt: new Date().toISOString() };
+    accounts[owner] = { pwHash: pwHash(BOARD_PASSWORD), boardFile, createdAt: new Date().toISOString(), admin: true };
     saveAccounts();
     console.log('[迁移] 检测到旧版共享看板，已迁移为账号 "owner"（密码=原访问密码）。');
     console.log('        请用 用户名 owner + 原密码 登录；之后可在界面里为家人/朋友注册各自独立账号。');

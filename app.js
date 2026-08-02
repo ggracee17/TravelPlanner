@@ -37,6 +37,7 @@ const app = {
   /* ====== 初始化 ====== */
   init() {
     this.readConfig();
+    this._initI18n();
     if (this.backend.enabled) {
       // 后端模式：登录闸门 → 拉取服务端看板 → 实时同步
       this.sessionToken = this.localGet('travel_board_token');
@@ -53,9 +54,9 @@ const app = {
     this.renderAll();
     this.updateStorageStats();
     if (this.state.destinations.length === 0) {
-      this.toast('👋 欢迎使用私人旅行规划工作台！请在「板块1」新建您的第一个目的地档案。', 'success');
+      this.toast(this.t('toast.welcome'), 'success');
     } else {
-      this.toast(`已载入 ${this.state.destinations.length} 个目的地档案`, 'success');
+      this.toast(this.t('toast.loaded', { n: this.state.destinations.length }), 'success');
     }
   },
 
@@ -79,7 +80,7 @@ const app = {
         this.renderSwitcher();
         this.renderAll();
         this.updateStatus();
-        this.toast('已连接到旅行看板（账号：' + (this.sessionUser || '?') + '）', 'success');
+        this.toast(this.t('toast.boardConnected', { u: this.sessionUser || '?' }), 'success');
       })
       .catch(() => {
         // 服务端连不上：若有本地缓存（上次成功镜像），先渲染出来，避免白屏/丢数据
@@ -90,25 +91,25 @@ const app = {
         if (typeof this.ensureChecklists === 'function') this.ensureChecklists();
         this.renderSwitcher();
         this.renderAll();
-        this.toast('无法连接服务端，已显示本地最近缓存（请检查网络后刷新）', 'error');
-        this.updateStatus('连接失败');
+        this.toast(this.t('status.connectError'), 'error');
+        this.updateStatus(this.t('status.connectError'));
       });
   },
 
   showLogin() {
-    this.openModal('🔒 登录旅行看板', `
-      <p class="text-sm text-slate-600 mb-3">每个账号拥有<strong>独立的旅行看板</strong>。家人朋友可各自注册账号、建自己的行程，互不串看。</p>
+    this.openModal(this.t('auth.loginTitle'), `
+      <p class="text-sm text-slate-600 mb-3">${this.t('auth.loginIntro')}</p>
       <div class="form-field">
-        <label>用户名</label>
+        <label>${this.t('auth.username')}</label>
         <input id="loginUser" value="${this.sessionUser || ''}" placeholder="如 owner" onkeydown="if(event.key==='Enter')document.getElementById('loginPw').focus()" />
       </div>
       <div class="form-field">
-        <label>密码</label>
-        <input id="loginPw" type="password" placeholder="请输入密码" onkeydown="if(event.key==='Enter')app.doUnlock(document.getElementById('loginUser').value, document.getElementById('loginPw').value)" />
+        <label>${this.t('auth.password')}</label>
+        <input id="loginPw" type="password" placeholder="${this.t('auth.password')}" onkeydown="if(event.key==='Enter')app.doUnlock(document.getElementById('loginUser').value, document.getElementById('loginPw').value)" />
       </div>
-      <p class="text-tiny text-slate-500 mt-2">还没有账号？<a href="javascript:void(0)" onclick="app.showRegister()" class="text-sky-700 hover:underline">注册新账号</a></p>
+      <p class="text-tiny text-slate-500 mt-2">${this.t('auth.forgotHint')} <a href="javascript:void(0)" onclick="app.showRegister()" class="text-sky-700 hover:underline">${this.t('auth.registerLink')}</a></p>
     `, [
-      { text: '登录', class: 'btn btn-primary', action: "app.doUnlock(document.getElementById('loginUser').value, document.getElementById('loginPw').value)" }
+      { text: this.t('auth.login'), class: 'btn btn-primary', action: "app.doUnlock(document.getElementById('loginUser').value, document.getElementById('loginPw').value)" }
     ]);
     setTimeout(() => { const i = document.getElementById('loginUser'); if (i) i.focus(); }, 50);
   },
@@ -131,23 +132,23 @@ const app = {
   },
 
   showRegister() {
-    this.openModal('🆕 注册新账号', `
-      <p class="text-sm text-slate-600 mb-3">注册后将获得一个<strong>全新的独立旅行看板</strong>，与原账号数据互不干扰。</p>
+    this.openModal(this.t('auth.registerTitle'), `
+      <p class="text-sm text-slate-600 mb-3">${this.t('auth.registerIntro')}</p>
       <div class="form-field">
-        <label>用户名（3–32 位字母/数字/下划线）</label>
+        <label>${this.t('auth.usernameHint')}</label>
         <input id="regUser" placeholder="如 michael" onkeydown="if(event.key==='Enter')document.getElementById('regPw').focus()" />
       </div>
       <div class="form-field">
-        <label>密码</label>
-        <input id="regPw" type="password" placeholder="设置密码" onkeydown="if(event.key==='Enter')document.getElementById('regPw2').focus()" />
+        <label>${this.t('auth.password')}</label>
+        <input id="regPw" type="password" placeholder="${this.t('auth.password')}" onkeydown="if(event.key==='Enter')document.getElementById('regPw2').focus()" />
       </div>
       <div class="form-field">
-        <label>确认密码</label>
-        <input id="regPw2" type="password" placeholder="再次输入密码" onkeydown="if(event.key==='Enter')app.doRegister(document.getElementById('regUser').value, document.getElementById('regPw').value, document.getElementById('regPw2').value)" />
+        <label>${this.t('auth.confirmPw')}</label>
+        <input id="regPw2" type="password" placeholder="${this.t('auth.confirmPw')}" onkeydown="if(event.key==='Enter')app.doRegister(document.getElementById('regUser').value, document.getElementById('regPw').value, document.getElementById('regPw2').value)" />
       </div>
-      <p class="text-tiny text-slate-500 mt-2">已有账号？<a href="javascript:void(0)" onclick="app.showLogin()" class="text-sky-700 hover:underline">返回登录</a></p>
+      <p class="text-tiny text-slate-500 mt-2">${this.t('auth.hasAccount')}<a href="javascript:void(0)" onclick="app.showLogin()" class="text-sky-700 hover:underline">${this.t('auth.backToLogin')}</a></p>
     `, [
-      { text: '注册并进入', class: 'btn btn-primary', action: "app.doRegister(document.getElementById('regUser').value, document.getElementById('regPw').value, document.getElementById('regPw2').value)" }
+      { text: this.t('auth.registerSubmit'), class: 'btn btn-primary', action: "app.doRegister(document.getElementById('regUser').value, document.getElementById('regPw').value, document.getElementById('regPw2').value)" }
     ]);
     setTimeout(() => { const i = document.getElementById('regUser'); if (i) i.focus(); }, 50);
   },
@@ -187,7 +188,95 @@ const app = {
     if (this._sse) { try { this._sse.close(); } catch (e) {} this._sse = null; }
     this.updateStatus();
     this.showLogin();
-    this.toast('已退出登录', 'info');
+    this.toast(this.t('auth.loggedOut'), 'info');
+  },
+
+  /* ====== 改密码 / 重置他人密码 ====== */
+  showChangePassword() {
+    this.openModal(this.t('auth.changePwTitle'), `
+      <div class="form-field">
+        <label>${this.t('auth.oldPw')}</label>
+        <input id="cpOld" type="password" placeholder="${this.t('auth.oldPw')}" onkeydown="if(event.key==='Enter')document.getElementById('cpNew').focus()" />
+      </div>
+      <div class="form-field">
+        <label>${this.t('auth.newPw')}</label>
+        <input id="cpNew" type="password" placeholder="${this.t('auth.newPw')}" onkeydown="if(event.key==='Enter')document.getElementById('cpNew2').focus()" />
+      </div>
+      <div class="form-field">
+        <label>${this.t('auth.confirmPw')}</label>
+        <input id="cpNew2" type="password" placeholder="${this.t('auth.confirmPw')}" onkeydown="if(event.key==='Enter')app.doChangePassword(document.getElementById('cpOld').value, document.getElementById('cpNew').value, document.getElementById('cpNew2').value)" />
+      </div>
+    `, [
+      { text: this.t('auth.changePw'), class: 'btn btn-primary', action: "app.doChangePassword(document.getElementById('cpOld').value, document.getElementById('cpNew').value, document.getElementById('cpNew2').value)" },
+      { text: this.t('backup.close'), class: 'btn btn-ghost', action: 'app.closeModal()' }
+    ]);
+    setTimeout(() => { const i = document.getElementById('cpOld'); if (i) i.focus(); }, 50);
+  },
+
+  doChangePassword(oldPw, newPw, newPw2) {
+    oldPw = (oldPw || '').trim(); newPw = (newPw || '').trim(); newPw2 = (newPw2 || '').trim();
+    if (!oldPw) return this.toast(this.t('auth.oldPw') + '?', 'warning');
+    if (!newPw) return this.toast(this.t('auth.newPw') + '?', 'warning');
+    if (newPw !== newPw2) return this.toast(this.t('auth.pwMismatch'), 'warning');
+    fetch(this.base() + '/api/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.sessionToken },
+      body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw })
+    })
+      .then(r => r.json().then(j => ({ status: r.status, j })))
+      .then(({ status, j }) => {
+        if (status === 200 && j && j.token) { this.closeModal(); this._setSessionToken(j.token); this.toast(this.t('auth.pwChanged'), 'success'); }
+        else this.toast((j && j.error) || this.t('auth.oldPwWrong'), 'error');
+      })
+      .catch(() => this.toast(this.t('auth.connectError'), 'error'));
+  },
+
+  showResetUser() {
+    fetch(this.base() + '/api/admin/users', { headers: { Authorization: 'Bearer ' + this.sessionToken } })
+      .then(r => r.json().then(j => ({ status: r.status, j })))
+      .then(({ status, j }) => {
+        if (status !== 200 || !j.ok) { this.toast(this.t('auth.noPerm'), 'error'); return; }
+        const opts = (j.users || []).map(u => `<option value="${this._esc(u)}">${this._esc(u)}</option>`).join('');
+        this.openModal(this.t('auth.resetTitle'), `
+          <div class="form-field">
+            <label>${this.t('auth.targetUser')}</label>
+            <select id="ruTarget" class="w-full border border-slate-300 rounded px-2 py-1">${opts}</select>
+          </div>
+          <div class="form-field">
+            <label>${this.t('auth.newPw')}</label>
+            <input id="ruNew" type="password" placeholder="${this.t('auth.newPw')}" onkeydown="if(event.key==='Enter')app.doResetUser(document.getElementById('ruTarget').value, document.getElementById('ruNew').value)" />
+          </div>
+        `, [
+          { text: this.t('auth.resetSubmit'), class: 'btn btn-primary', action: "app.doResetUser(document.getElementById('ruTarget').value, document.getElementById('ruNew').value)" },
+          { text: this.t('backup.close'), class: 'btn btn-ghost', action: 'app.closeModal()' }
+        ]);
+      })
+      .catch(() => this.toast(this.t('auth.connectError'), 'error'));
+  },
+
+  doResetUser(target, newPw) {
+    target = (target || '').trim(); newPw = (newPw || '').trim();
+    if (!target) return this.toast(this.t('auth.targetUser') + '?', 'warning');
+    if (!newPw) return this.toast(this.t('auth.newPw') + '?', 'warning');
+    fetch(this.base() + '/api/admin/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.sessionToken },
+      body: JSON.stringify({ target, newPassword: newPw })
+    })
+      .then(r => r.json().then(j => ({ status: r.status, j })))
+      .then(({ status, j }) => {
+        if (status === 200 && j && j.ok) { this.closeModal(); this.toast(this.t('auth.pwResetDone'), 'success'); }
+        else this.toast((j && j.error) || this.t('auth.noPerm'), 'error');
+      })
+      .catch(() => this.toast(this.t('auth.connectError'), 'error'));
+  },
+
+  // 更新会话 token（改密码后服务端返回新 token）并重启 SSE
+  _setSessionToken(token) {
+    this.sessionToken = token;
+    this.localSet('travel_board_token', token);
+    if (this._sse) { try { this._sse.close(); } catch (e) {} this._sse = null; }
+    this.connectSSE();
   },
 
   fetchBoard() {
@@ -217,7 +306,7 @@ const app = {
       es.addEventListener('presence', (ev) => {
         try { this._online = JSON.parse(ev.data).count || 0; this.updateStatus(); } catch (e) {}
       });
-      es.onerror = () => { this._online = 0; this.updateStatus('连接中断'); };
+      es.onerror = () => { this._online = 0; this.updateStatus(this.t('status.disconnected')); };
     } catch (e) {}
   },
 
@@ -277,14 +366,14 @@ const app = {
         this.state = data;
         this._lastSig = '';
         const done = this.pushBoard();
-        this.toast('已从浏览器本地备份迁移 ' + data.destinations.length + ' 个目的地到你的旅行看板', 'success');
+        this.toast(this.t('toast.migrated', { n: data.destinations.length }), 'success');
         Promise.resolve(done).then(() => {
           try { localStorage.setItem(STORAGE_KEY + '_migrated', raw); localStorage.removeItem(STORAGE_KEY); } catch (e) {}
         });
       } else if (localHas && serverHas) {
         // 两端都有数据：以服务端为准（多人协作的权威态），本地仅做归档保留、不覆盖
         try { localStorage.setItem(STORAGE_KEY + '_migrated', raw); localStorage.removeItem(STORAGE_KEY); } catch (e) {}
-        this.toast('检测到浏览器本地也有旧数据，已归档为本地备份（未覆盖服务端），如需合并请手动导出', 'info');
+        this.toast(this.t('toast.migratedConflict'), 'info');
       }
     } catch (e) {
       console.warn('[迁移] 本地数据迁移失败（忽略）：', e.message);
@@ -301,9 +390,9 @@ const app = {
     if (!el) return;
     if (!this.backend.enabled) { el.classList.add('hidden'); el.textContent = ''; this._renderAccountBar(); return; }
     el.classList.remove('hidden');
-    let s = '🔒 已解锁';
+    let s = this.t('status.unlocked');
     const online = this._online > 0 ? this._online : (this._sse && this._sse.readyState === 1 ? 1 : 0);
-    if (online > 0) s += ' · 在线 ' + online + ' 人';
+    if (online > 0) s += ' · ' + this.t('status.online', { n: online });
     if (extra) s += ' · ' + extra;
     else if (this._lastSaved) s += ' · ' + this._lastSaved;
     el.textContent = s;
@@ -315,12 +404,76 @@ const app = {
     if (!bar) return;
     if (!this.backend.enabled || !this.sessionUser) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
     bar.classList.remove('hidden');
-    bar.innerHTML = `👤 <strong>${this._esc(this.sessionUser)}</strong>` +
-      `<button class="text-sky-700 hover:underline" onclick="app.logout()">退出</button>`;
+    let html = `👤 <strong>${this._esc(this.sessionUser)}</strong>` +
+      `<button class="text-sky-700 hover:underline" onclick="app.showChangePassword()">${this.t('auth.changePw')}</button>`;
+    if (this.sessionUser === 'owner') {
+      html += `<button class="text-sky-700 hover:underline" onclick="app.showResetUser()">${this.t('auth.resetOther')}</button>`;
+    }
+    html += `<button class="text-sky-700 hover:underline" onclick="app.logout()">${this.t('auth.logout')}</button>`;
+    bar.innerHTML = html;
+  },
+
+  // 初始化界面语言：设置 <html lang> + 翻译静态元素 + 导航
+  _initI18n() {
+    const html = document.querySelector('html');
+    if (html) html.setAttribute('lang', this.i18nLang() === 'en' ? 'en' : 'zh-CN');
+    this._applyI18n(document);
+    this._renderNav();
   },
 
   _esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  },
+
+  /* ====== 国际化（中/EN） ====== */
+  i18nLang() {
+    try { return localStorage.getItem('travel_lang') || 'zh'; } catch (e) { return 'zh'; }
+  },
+
+  // 取翻译文案：dict[lang][key] → 回退 zh → key；支持 {var} 插值
+  t(key, vars) {
+    const I = (typeof window !== 'undefined' && window.I18N) || {};
+    const dict = I.dict || {};
+    let s = (dict[this.i18nLang()] && dict[this.i18nLang()][key]) != null
+      ? dict[this.i18nLang()][key]
+      : ((dict.zh && dict.zh[key]) != null ? dict.zh[key] : key);
+    if (vars && typeof s === 'string') {
+      s = s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : m));
+    }
+    return s;
+  },
+
+  setLang(l) {
+    try { localStorage.setItem('travel_lang', l); } catch (e) {}
+    this._lang = l;
+    const html = document.querySelector('html');
+    if (html) html.setAttribute('lang', l === 'en' ? 'en' : 'zh-CN');
+    this._applyI18n(document);
+    this._renderNav();
+    if (typeof this.renderAll === 'function') this.renderAll();
+    this.updateStatus();
+    this._renderAccountBar();
+  },
+
+  toggleLang() {
+    this.setLang(this.i18nLang() === 'zh' ? 'en' : 'zh');
+  },
+
+  // 把带 data-i18n="key" 的静态元素文案替换为翻译（index.html 里的标题/按钮/nav 等）
+  _applyI18n(root) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      if (key) el.textContent = this.t(key);
+    });
+  },
+
+  // 翻译导航 Tab（用 data-i18n 属性）
+  _renderNav() {
+    document.querySelectorAll('#navTabs .tab-btn').forEach(btn => {
+      const key = btn.getAttribute('data-i18n');
+      if (key) btn.textContent = this.t(key);
+    });
   },
 
   nowTime() {
@@ -332,6 +485,7 @@ const app = {
     if (!this.sessionToken) return Promise.resolve();
     const payload = JSON.stringify(this.state);
     this._writeLocalCache(); // 安全网：推送前先镜像一份到本地
+    this.updateStatus(this.t('status.saving'));
     return fetch(this.base() + '/api/board', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.sessionToken },
@@ -344,16 +498,16 @@ const app = {
       .then(j => {
         if (j && j.ok) {
           this._lastSig = payload;
-          this._lastSaved = '已保存 ' + this.nowTime();
+          this._lastSaved = this.t('status.saved') + ' ' + this.nowTime();
           this.updateStatus();
           this._flushPendingRemote(); // 本地改动已落盘，现在可以把此前暂存的远端状态安全合并进来
         } else if (j === null) {
           // 已跳转登录
         } else {
-          this.updateStatus('保存失败');
+          this.updateStatus(this.t('status.saveFail'));
         }
       })
-      .catch(() => this.updateStatus('保存失败'));
+      .catch(() => this.updateStatus(this.t('status.saveFail')));
   },
 
   /* ====== 持久化 ====== */
@@ -570,11 +724,11 @@ const app = {
         const wb = XLSX.utils.book_new();
         sheets.forEach(s => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(s.rows), s.name.slice(0, 31)));
         XLSX.writeFile(wb, `travel_workbook_${new Date().toISOString().slice(0,10)}.xlsx`);
-        this.toast('已导出 JSON 备份 + Excel 全量工作簿', 'success');
+        this.toast(this.t('export.excelDone'), 'success');
       } else {
         const ts = new Date().toISOString().slice(0, 10);
         sheets.forEach(s => this.downloadCSV(`travel_${s.name}_${ts}.csv`, s.rows));
-        this.toast(`已导出 JSON + ${sheets.length} 个 CSV（Excel 库未加载，已自动降级）`, 'warning');
+        this.toast(this.t('export.csvDone', { n: sheets.length }), 'warning');
       }
     } catch (e) {
       this.toast('导出失败：' + e.message, 'error');
@@ -646,23 +800,23 @@ const app = {
   },
 
   openBackupDialog() {
-    this.openModal('💾 备份与恢复', `
+    this.openModal(this.t('backup.title'), `
       <div class="space-y-3 text-sm">
         <div class="p-3 bg-sky-50 rounded border border-sky-200">
-          <strong>📥 导出 JSON 备份：</strong>将所有数据保存为 JSON 文件，建议定期备份到本地磁盘或网盘。
+          <strong>📥 ${this.t('backup.exportLabel')}：</strong>${this.t('backup.exportHint')}
         </div>
         <div class="p-3 bg-amber-50 rounded border border-amber-200">
-          <strong>📤 恢复 JSON 备份：</strong>从之前备份的 JSON 文件恢复数据。
+          <strong>📤 ${this.t('backup.importLabel')}：</strong>${this.t('backup.importHint')}
         </div>
         <div class="p-3 bg-red-50 rounded border border-red-200">
-          <strong>🗑️ 清空数据：</strong>慎用！将删除所有目的地、行程、花销、素材、清单。此操作不可撤销，请先备份。
+          <strong>🗑️ ${this.t('backup.clearLabel')}：</strong>${this.t('backup.clearHint')}
         </div>
       </div>
     `, [
-      { text: '导出 JSON', class: 'btn btn-success', action: 'app.exportJson()' },
-      { text: '恢复 JSON', class: 'btn btn-warning', action: 'app.importJson()' },
-      { text: '清空全部', class: 'btn btn-danger', action: 'app.confirmClear()' },
-      { text: '关闭', class: 'btn btn-ghost', action: 'app.closeModal()' }
+      { text: this.t('backup.exportJson'), class: 'btn btn-success', action: 'app.exportJson()' },
+      { text: this.t('backup.importJson'), class: 'btn btn-warning', action: 'app.importJson()' },
+      { text: this.t('backup.clearAll'), class: 'btn btn-danger', action: 'app.confirmClear()' },
+      { text: this.t('backup.close'), class: 'btn btn-ghost', action: 'app.closeModal()' }
     ]);
   },
 
@@ -674,7 +828,7 @@ const app = {
     a.download = `travel_backup_${new Date().toISOString().slice(0,10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    this.toast('JSON 备份已下载', 'success');
+    this.toast(this.t('backup.exportDone'), 'success');
   },
 
   importJson() {
@@ -683,8 +837,8 @@ const app = {
   },
 
   confirmClear() {
-    if (!confirm('⚠️ 真的要清空所有数据吗？此操作不可撤销！建议先点击「导出 JSON」备份。')) return;
-    if (!confirm('请再次确认：所有目的地、行程、花销、素材、清单将永久删除。')) return;
+    if (!confirm(this.t('clear.confirm1'))) return;
+    if (!confirm(this.t('clear.confirm2'))) return;
     this.state = {
       destinations: [],
       activeDestinationId: null,
@@ -694,7 +848,7 @@ const app = {
     this.saveState();
     this.renderAll();
     this.closeModal();
-    this.toast('已清空全部数据', 'warning');
+    this.toast(this.t('clear.done'), 'warning');
   },
 
   /* ====== 模态框 ====== */

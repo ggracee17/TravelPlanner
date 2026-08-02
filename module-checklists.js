@@ -91,10 +91,10 @@ app.modules.checklists = {
     sec.innerHTML = `
       <div class="card">
         <div class="card-title">
-          <span>✅ 板块3 · 行前准备核对清单</span>
+          <span>${app.t('checklist.title')}</span>
           <div class="ml-auto flex gap-2">
-            <button class="btn btn-success" onclick="app.modules.checklists.exportXlsx()">📥 导出 Excel</button>
-            <button class="btn btn-ghost" onclick="app.modules.checklists.reset()">🔄 重置默认清单</button>
+            <button class="btn btn-success" onclick="app.modules.checklists.exportXlsx()">${app.t('checklist.export')}</button>
+            <button class="btn btn-ghost" onclick="app.modules.checklists.reset()">${app.t('checklist.reset')}</button>
           </div>
         </div>
         <p class="text-sm text-slate-600 mb-4">带勾选框的清单，出发前可逐项打勾。行李清单会根据当前目的地气候智能增减。</p>
@@ -107,9 +107,9 @@ app.modules.checklists = {
       <!-- 证件清单 -->
       <div class="card">
         <div class="card-title">
-          <span>📄 证件手续清单（已勾选 ${docsChecked} / ${docs.length}）</span>
+          <span>${app.t('checklist.docsTitle')}（${app.t('checklist.checked')} ${docsChecked} / ${docs.length}）</span>
           <div class="ml-auto flex gap-2">
-            <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addDoc()">➕ 新增项</button>
+            <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addDoc()">${app.t('checklist.addItem')}</button>
           </div>
         </div>
         <div id="docList">
@@ -120,9 +120,9 @@ app.modules.checklists = {
       <!-- 行李清单 -->
       <div class="card">
         <div class="card-title">
-          <span>🧳 行李打包清单（已勾选 ${lugChecked} / ${lug.length}）</span>
+          <span>${app.t('checklist.lugTitle')}（${app.t('checklist.checked')} ${lugChecked} / ${lug.length}）</span>
           <div class="ml-auto flex gap-2">
-            <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addLug()">➕ 新增项</button>
+            <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addLug()">${app.t('checklist.addItem')}</button>
           </div>
         </div>
         <p class="text-tiny text-slate-500 mb-2">已按品类分组：衣物 / 洗护 / 电子设备 / 药品 / 随身杂物</p>

@@ -37,8 +37,10 @@ app.modules.map = {
   _failed: false,
   _cbs: [],
   _lastBounds: null,
-  _geoCache: {},        // 会话内地理编码结果缓存（query → {lat,lng}），避免重复消耗配额
-  _geoFail: new Set(),  // 会话内地理编码失败的 query，避免重复调用
+  _geoCacheKey: 'travel_geo_cache_v1', // 离线地理编码缓存（跨刷新/会话复用，省 Geocoding 配额）
+  _geoCache: {},        // 地理编码结果缓存（query → {lat,lng}），先从 localStorage 装载，避免重复消耗配额
+  _geoFail: new Set(),  // 地理编码失败的 query，避免重复调用（持久化，跨刷新也不重试）
+  _geoLoaded: false,
 
   render() {
     const sec = document.querySelector('[data-section=map]');
@@ -47,11 +49,11 @@ app.modules.map = {
     if (!d) {
       sec.innerHTML = `
         <div class="card">
-          <div class="card-title">🗺️ 板块6 · 行程地图总览</div>
+          <div class="card-title">${app.t('map.title')}</div>
           <div class="empty-state">
             <div class="icon">🗺️</div>
-            <h3>请先选择目的地</h3>
-            <p class="text-sm">在「板块1」建立目的地并排好每日行程后，这里会在地图上标出所有地点</p>
+            <h3>${app.t('map.emptyTitle')}</h3>
+            <p class="text-sm">${app.t('map.emptyHint')}</p>
           </div>
         </div>`;
       return;
@@ -63,18 +65,15 @@ app.modules.map = {
     sec.innerHTML = `
       <div class="card">
         <div class="card-title">
-          <span>🗺️ 板块6 · 行程地图总览</span>
-          <div class="ml-auto">
+          <span>${app.t('map.title')}</span>
+          <div class="ml-auto flex items-center gap-2">
             <select id="mapDaySel" class="text-sm border border-slate-300 rounded px-2 py-1" onchange="app.modules.map.rerender()">
-              <option value="__all">全部日期</option>${sel}
+              <option value="__all">${app.t('map.allDates')}</option>${sel}
             </select>
+            <button class="btn btn-ghost btn-sm" onclick="app.modules.map.clearGeoCache()" title="${app.t('map.clearCacheTip')}">${app.t('map.clearCache')}</button>
           </div>
         </div>
-        <p class="text-sm text-slate-600 mb-3">
-          在 Google 地图上标出每日行程的地点，可下拉切换查看<strong class="text-sky-700">某一天</strong>的行程分布。
-          坐标优先用行程块里填的「纬度 / 经度」（粘贴 Google Map 链接会自动获取）；未填则按「名称」通过 Google 地理编码自动定位（需联网）。
-          下方列表里的<strong class="text-sky-700">地点名称已是可点击链接</strong>，点开即跳转到 Google Maps。
-        </p>
+        <p class="text-sm text-slate-600 mb-3">${app.t('map.intro')}</p>
         <div id="mapView" class="map-view"></div>
         <div id="mapLegend" class="mt-2 mb-2 flex flex-wrap gap-3 text-xs"></div>
         <div id="mapList" class="mt-3"></div>
@@ -155,9 +154,41 @@ app.modules.map = {
   },
 
   geocodeCached(q) {
+    if (!this._geoLoaded) this.loadGeoCache();
     if (this._geoCache[q]) return Promise.resolve(this._geoCache[q]);
     if (this._geoFail.has(q)) return Promise.resolve(null);
-    return this.geocode(q).then(r => { if (r) this._geoCache[q] = r; else this._geoFail.add(q); return r; });
+    return this.geocode(q).then(r => {
+      if (r) { this._geoCache[q] = r; this.persistGeoCache(); }
+      else { this._geoFail.add(q); this.persistGeoCache(); }
+      return r;
+    });
+  },
+
+  /* 离线地理编码缓存：持久化到 localStorage，跨刷新/会话复用，进一步省 Google Geocoding 配额 */
+  loadGeoCache() {
+    this._geoLoaded = true;
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const raw = localStorage.getItem(this._geoCacheKey);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d && d.cache && typeof d.cache === 'object') this._geoCache = d.cache;
+      if (d && Array.isArray(d.fail)) this._geoFail = new Set(d.fail);
+    } catch (e) {}
+  },
+
+  persistGeoCache() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(this._geoCacheKey, JSON.stringify({ cache: this._geoCache, fail: Array.from(this._geoFail) }));
+    } catch (e) {}
+  },
+
+  clearGeoCache() {
+    this._geoCache = {};
+    this._geoFail = new Set();
+    try { if (typeof localStorage !== 'undefined') localStorage.removeItem(this._geoCacheKey); } catch (e) {}
+    if (typeof app !== 'undefined' && app.toast) app.toast(app.t ? app.t('map.cacheCleared') : '已清除地理编码缓存', 'info');
   },
 
   async showMap() {
@@ -271,7 +302,7 @@ app.modules.map = {
         <span style="width:10px;height:10px;border-radius:999px;background:${color};margin-top:5px;flex:none"></span>
         <div class="min-w-0">
           <div class="truncate">${dayTag}${nameHtml} <span class="text-tiny text-slate-400">${s.startTime || ''}</span></div>
-          <div class="text-tiny text-slate-500 truncate">${located ? '' : (s.mapUrl ? '· <span class="text-sky-600">🔗 已链接（点名称打开）</span>' : '· <span class="text-amber-600">未定位（填写经纬度或粘贴地图链接）</span>')}</div>
+          <div class="text-tiny text-slate-500 truncate">${located ? '' : (s.mapUrl ? '· <span class="text-sky-600">🔗 ' + app.t('map.linked') + '</span>' : '· <span class="text-amber-600">' + app.t('map.unlocated') + '</span>')}</div>
         </div>
       </div>`;
     }).join('') + `</div>`;
@@ -279,12 +310,12 @@ app.modules.map = {
 
   _noteNeedKey() {
     const view = document.getElementById('mapView');
-    if (view) view.innerHTML = '<div class="map-fallback">⚠️ 尚未配置 Google Maps API Key。请到 Render 控制台给本服务添加环境变量 <code>GMAPS_API_KEY</code>（后端会自动注入前端），并在 Google Cloud 启用 <b>Maps JavaScript API</b> 与 <b>Geocoding API</b>，重新部署后刷新即可显示地图。下方列表仍可正常查看地点。</div>';
+    if (view) view.innerHTML = '<div class="map-fallback">' + app.t('map.needKey') + '</div>';
   },
 
   _noteMapFallback() {
     const view = document.getElementById('mapView');
-    if (view) view.innerHTML = '<div class="map-fallback">⚠️ Google Maps 未能加载。常见原因：① Key 未启用 <b>Maps JavaScript API</b> 与 <b>Geocoding API</b>；② Key 的「应用限制」(HTTP 引荐来源 / 网站限制) 未包含本站点域名；③ 网络被拦截。请到 Google Cloud 控制台核对后刷新。下方列表仍可正常查看地点。</div>';
+    if (view) view.innerHTML = '<div class="map-fallback">' + app.t('map.fallback') + '</div>';
   },
 
   _esc(s) {

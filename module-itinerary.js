@@ -78,7 +78,7 @@ app.modules.itinerary = {
     if (!d) {
       sec.innerHTML = `
         <div class="card">
-          <div class="card-title">🗓️ 板块2 · 每日行程表（时间轴）</div>
+          <div class="card-title">${app.t('itinerary.title')}</div>
           <div class="empty-state">
             <div class="icon">🗺️</div>
             <h3>请先选择或创建目的地</h3>
@@ -96,21 +96,21 @@ app.modules.itinerary = {
     sec.innerHTML = `
       <div class="card">
         <div class="card-title">
-          <span>🗓️ 板块2 · 每日行程表（时间轴）</span>
+          <span>${app.t('itinerary.title')}</span>
           <div class="ml-auto flex gap-2 items-center">
-            <label class="text-sm text-slate-600 whitespace-nowrap">交通方式</label>
+            <label class="text-sm text-slate-600 whitespace-nowrap">${app.t('itinerary.travelMode')}</label>
             <select id="itinTravelMode" class="text-sm border border-slate-300 rounded px-2 py-1" onchange="app.modules.itinerary.setTravelMode(this.value)">
-              <option value="driving" ${travMode === 'driving' ? 'selected' : ''}>🚗 驾车</option>
-              <option value="walking" ${travMode === 'walking' ? 'selected' : ''}>🚶 步行</option>
-              <option value="transit" ${travMode === 'transit' ? 'selected' : ''}>🚌 公交/地铁</option>
-              <option value="bicycling" ${travMode === 'bicycling' ? 'selected' : ''}>🚲 骑行</option>
+              <option value="driving" ${travMode === 'driving' ? 'selected' : ''}>🚗 ${app.t('itinerary.driving')}</option>
+              <option value="walking" ${travMode === 'walking' ? 'selected' : ''}>🚶 ${app.t('itinerary.walking')}</option>
+              <option value="transit" ${travMode === 'transit' ? 'selected' : ''}>🚌 ${app.t('itinerary.transit')}</option>
+              <option value="bicycling" ${travMode === 'bicycling' ? 'selected' : ''}>🚲 ${app.t('itinerary.bicycling')}</option>
             </select>
-            <button class="btn btn-primary" onclick="app.modules.itinerary.computeTravelAll()" title="按顶部所选交通方式，重新计算所有天的相邻行程点交通时间">🚗 全部重算</button>
-            <button class="btn ${app.state.ecoMode ? 'btn-warning' : 'btn-ghost'}" onclick="app.modules.itinerary.toggleEco()" title="开启后暂停「交通距离计算」与「地图自动地理编码」两类 Google API 调用，省 credits">💡 省 Credits：${app.state.ecoMode ? '开' : '关'}</button>
-            <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleZoom()">${app.state.itineraryZoom === 'compact' ? '🔍 宽松视图' : '🔍 紧凑视图'}</button>
-            <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleExpand()">${expanded ? '🔼 收起空白' : '🔽 展开全部时间'}</button>
-            <button class="btn btn-warning" onclick="app.modules.itinerary.autoGenDays()">⚡ 按日期自动生成空白日程</button>
-            <button class="btn btn-primary" onclick="app.modules.itinerary.addDay()">➕ 手动新增一日</button>
+            <button class="btn btn-primary" onclick="app.modules.itinerary.computeTravelAll()" title="按顶部所选交通方式，重新计算所有天的相邻行程点交通时间">${app.t('itinerary.recalc')}</button>
+            <button class="btn ${app.state.ecoMode ? 'btn-warning' : 'btn-ghost'}" onclick="app.modules.itinerary.toggleEco()" title="开启后暂停「交通距离计算」与「地图自动地理编码」两类 Google API 调用，省 credits">💡 ${app.t('itinerary.ecoLabel')}：${app.state.ecoMode ? app.t('on') : app.t('off')}</button>
+            <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleZoom()">${app.state.itineraryZoom === 'compact' ? '🔍 ' + app.t('itinerary.zoomLoose') : '🔍 ' + app.t('itinerary.zoomCompact')}</button>
+            <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleExpand()">${expanded ? '🔼 ' + app.t('itinerary.collapse') : '🔽 ' + app.t('itinerary.expand')}</button>
+            <button class="btn btn-warning" onclick="app.modules.itinerary.autoGenDays()">${app.t('itinerary.autoGen')}</button>
+            <button class="btn btn-primary" onclick="app.modules.itinerary.addDay()">${app.t('itinerary.addDay')}</button>
           </div>
         </div>
         <p class="text-sm text-slate-600 mb-4">
@@ -183,8 +183,8 @@ app.modules.itinerary = {
             <div class="text-xs opacity-90">${day.weather || '天气未填'}　·　行程块 ${spots.length} 个　·　门票 ¥${totalTicket.toFixed(0)}</div>
           </div>
           <div class="flex gap-2">
-            <button class="btn btn-ghost btn-sm" onclick="app.modules.itinerary.computeTravel('${day.id}')" title="用 Google 计算相邻行程点之间的交通时间（按顶部所选交通方式）">🚗 交通时间</button>
-            <button class="btn btn-primary btn-sm" onclick="app.modules.itinerary.openTripForm('spot','${day.id}','')">➕ 添加</button>
+            <button class="btn btn-ghost btn-sm" onclick="app.modules.itinerary.computeTravel('${day.id}')" title="用 Google 计算相邻行程点之间的交通时间（按顶部所选交通方式）">${app.t('itinerary.travelTime')}</button>
+            <button class="btn btn-primary btn-sm" onclick="app.modules.itinerary.openTripForm('spot','${day.id}','')">${app.t('itinerary.addSpot')}</button>
             <button class="btn btn-ghost btn-sm" onclick="app.modules.itinerary.editDay('${day.id}')">✏️ 日期</button>
             <button class="btn btn-danger btn-sm" onclick="app.modules.itinerary.removeDay('${day.id}')">🗑️</button>
           </div>

@@ -12,7 +12,7 @@ app.modules.expenses = {
     if (!d) {
       sec.innerHTML = `
         <div class="card">
-          <div class="card-title">💰 板块4 · 旅行花销记账台账</div>
+          <div class="card-title">${app.t('expense.title')}</div>
           <div class="empty-state">
             <div class="icon">🗺️</div>
             <h3>请先选择或创建目的地</h3>
@@ -46,13 +46,13 @@ app.modules.expenses = {
     sec.innerHTML = `
       <div class="card">
         <div class="card-title">
-          <span>💰 板块4 · 旅行花销记账台账</span>
+          <span>${app.t('expense.title')}</span>
           <div class="ml-auto flex gap-2 items-center">
-            <label class="text-xs text-slate-500 whitespace-nowrap">💱 汇率 1 澳币 =</label>
+            <label class="text-xs text-slate-500 whitespace-nowrap">💱 ${app.t('expense.rateLabel')}</label>
             <input id="expRate" type="number" min="0" step="0.1" value="${rate}" class="w-20 text-sm border border-slate-300 rounded px-2 py-1" onchange="app.modules.expenses.saveRate(this.value)" title="1 澳币折合多少台币，保存后所有澳币消费按此换算" />
-            <span class="text-xs text-slate-500">台币</span>
-            <button class="btn btn-primary" onclick="app.modules.expenses.addExp()">➕ 记一笔</button>
-            <button class="btn btn-success" onclick="app.modules.expenses.exportXlsx()">📥 导出 Excel</button>
+            <span class="text-xs text-slate-500">${app.t('expense.twd')}</span>
+            <button class="btn btn-primary" onclick="app.modules.expenses.addExp()">${app.t('expense.add')}</button>
+            <button class="btn btn-success" onclick="app.modules.expenses.exportXlsx()">${app.t('expense.export')}</button>
           </div>
         </div>
         <p class="text-sm text-slate-600 mb-4">
