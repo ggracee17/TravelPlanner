@@ -3,7 +3,7 @@
    使用 Google Maps JavaScript API 在地图上标出每日行程地点；
    支持按日期下拉筛选（全部 / 某一天）。
    坐标优先用行程块里填的经纬度（来自 Google Map 链接解析）；
-   未填则按「名称 + 地址」通过 Google Geocoding 自动定位，并回写保存。
+   未填则按「名称」通过 Google Geocoding 自动定位，并回写保存。
    无 API Key / 加载失败时降级为地点列表。
 
    API Key 由后端从环境变量 GMAPS_API_KEY 注入（见 server.js 的 /config.js 与 render.yaml），
@@ -63,7 +63,8 @@ app.modules.map = {
         </div>
         <p class="text-sm text-slate-600 mb-3">
           在 Google 地图上标出每日行程的地点，可下拉切换查看<strong class="text-sky-700">某一天</strong>的行程分布。
-          坐标优先用行程块里填的「纬度 / 经度」（粘贴 Google Map 链接会自动获取）；未填则按「名称 + 地址」通过 Google 地理编码自动定位（需联网）。
+          坐标优先用行程块里填的「纬度 / 经度」（粘贴 Google Map 链接会自动获取）；未填则按「名称」通过 Google 地理编码自动定位（需联网）。
+          下方列表里的<strong class="text-sky-700">地点名称已是可点击链接</strong>，点开即跳转到 Google Maps。
         </p>
         <div id="mapView" class="map-view"></div>
         <div id="mapList" class="mt-3"></div>
@@ -197,8 +198,7 @@ app.modules.map = {
       const marker = new gm.Marker({ position: pos, map, title: s.name || '地点', icon: this._pin(MAP_COLORS[s.type] || MAP_COLORS.other) });
       const content = `<div style="min-width:170px"><strong>${this._esc(s.name)}</strong>` +
         `<br><span style="font-size:.7rem;color:#64748b">${it.dayIndex >= 0 ? ('Day ' + (it.dayIndex + 1) + ' ') : ''}${s.startTime || ''}</span>` +
-        (s.address ? `<br><span style="font-size:.7rem;color:#475569">${this._esc(s.address)}</span>` : '') +
-        (s.mapUrl ? `<br><a href="${s.mapUrl}" target="_blank">🔗 Google Map</a>` : '') +
+        (this._mapsUrl(s) ? `<br><a href="${this._mapsUrl(s)}" target="_blank" rel="noopener">🔗 在 Google Maps 打开</a>` : '') +
         `</div>`;
       const info = new gm.InfoWindow({ content });
       marker.addListener('click', () => info.open(map, marker));
@@ -220,11 +220,15 @@ app.modules.map = {
       const s = it.spot;
       const located = okSet.has(s.id);
       const color = MAP_COLORS[s.type] || MAP_COLORS.other;
+      const url = this._mapsUrl(s);
+      const nameHtml = url
+        ? `<a href="${url}" target="_blank" rel="noopener" class="text-sm font-semibold truncate text-sky-700 hover:underline">${this._esc(s.name || '未命名')}</a>`
+        : `<span class="text-sm font-semibold truncate">${this._esc(s.name || '未命名')}</span>`;
       return `<div class="p-2 rounded border border-slate-200 flex items-start gap-2 ${located ? '' : 'opacity-60'}">
         <span style="width:10px;height:10px;border-radius:999px;background:${color};margin-top:5px;flex:none"></span>
         <div class="min-w-0">
-          <div class="text-sm font-semibold truncate">${this._esc(s.name || '未命名')} <span class="text-tiny text-slate-400">${s.startTime || ''}</span></div>
-          <div class="text-tiny text-slate-500 truncate">${s.address ? this._esc(s.address) : '地址未填'} ${located ? '' : '· <span class="text-amber-600">未定位（检查地址或填写经纬度）</span>'}</div>
+          <div class="truncate">${nameHtml} <span class="text-tiny text-slate-400">${s.startTime || ''}</span></div>
+          <div class="text-tiny text-slate-500 truncate">${located ? '' : '· <span class="text-amber-600">未定位（填写经纬度或粘贴地图链接）</span>'}</div>
         </div>
       </div>`;
     }).join('') + `</div>`;
@@ -242,5 +246,16 @@ app.modules.map = {
 
   _esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  },
+
+  /* 计算地点的 Google Maps 打开链接：优先用用户粘贴的地图链接，其次经纬度精确坐标，最后按名称搜索 */
+  _mapsUrl(s) {
+    if (s.mapUrl) return s.mapUrl;
+    if (s.lat != null && s.lng != null) {
+      return 'https://www.google.com/maps?q=' + encodeURIComponent(s.lat + ',' + s.lng);
+    }
+    const q = (s.name || '').trim();
+    if (q) return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q);
+    return '';
   }
 };
