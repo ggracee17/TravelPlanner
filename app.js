@@ -174,10 +174,12 @@ const app = {
   // 本地改动推送成功后，把暂存的远端状态应用进来（此时本地改动已落盘，覆盖是安全的）。
   // 若暂存态与当前态相同则跳过，避免无谓重渲染。
   _flushPendingRemote() {
-    if (!this._pendingRemote) return;
-    const d = this._pendingRemote;
+    // 本地改动已成功落盘（此刻服务端以本地刚推送的版本为准）。
+    // 此前在「本地有待推送改动」期间暂存的远端状态，此刻已落后于本地推送；
+    // 若再原样套用，会把用户刚保存的改动（如刚勾选的框）冲掉，
+    // 造成勾选框反复勾选/取消的抖动（两台电脑同时开页面时最明显）。
+    // 因此直接丢弃：更新的远端状态会通过后续 SSE 广播自然到达并正常应用。
     this._pendingRemote = null;
-    if (JSON.stringify(d) !== JSON.stringify(this.state)) this.applyRemote(d);
   },
 
   // 后端模式安全网：把当前态镜像到本地缓存，防止「推送/接收竞态」导致数据在刷新后丢失。
@@ -189,7 +191,9 @@ const app = {
   applyRemote(data) {
     this.state = this.normalizeState(data);
     this._lastSig = JSON.stringify(this.state);
-    if (typeof this.ensureChecklists === 'function') this.ensureChecklists();
+    // 注意：这里【不要】调用 ensureChecklists（它会 saveState → 触发 pushBoard → 服务端再广播 → 另一端又 applyRemote），
+    // 否则一端收到远端状态后会立刻回推，形成「广播风暴」：两台电脑互相不停推送同一份状态，
+    // 表现为勾选框自动反复勾选/取消。远端状态已是服务端权威态，只应用+渲染即可，无需再保存。
     this.renderSwitcher();
     this.renderAll();
     this.updateStatus();
