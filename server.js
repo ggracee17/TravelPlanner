@@ -8,7 +8,6 @@
    ============================================================ */
 
 const http = require('http');
-const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -19,7 +18,6 @@ const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 const BOARD_FILE = path.join(DATA_DIR, 'board.json');
 const SECRET_FILE = path.join(DATA_DIR, 'secret.txt');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
-const SEED_FILE = path.join(ROOT, 'seed-board.json'); // 仓库内提交的一次性种子；持久磁盘为空且未配置 Gist 时播种
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -33,62 +31,6 @@ if (!process.env.BOARD_PASSWORD) {
 // 持久化：数据存到本地文件（DATA_DIR，默认 ./data）。为了让数据在重部署/休眠后不丢，
 // 在 render.yaml 中把 Render「持久磁盘」挂到 DATA_DIR（见 disks 配置）。零外部 API 调用。
 
-// ---- 一次性迁移（从旧 GitHub Gist / 仓库种子导入到持久磁盘）----
-// 仅在「持久磁盘当前为空」且「提供了来源」时执行一次；成功后日常运行完全不碰外部 API。
-function httpsGetJson(url, headers) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers }, res => {
-      let body = '';
-      res.on('data', c => (body += c));
-      res.on('end', () => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          return resolve(httpsGetJson(res.headers.location, headers)); // 跟随一次重定向
-        }
-        if (res.statusCode !== 200) return reject(new Error('GitHub 返回 HTTP ' + res.statusCode));
-        try { resolve(JSON.parse(body)); } catch (e) { reject(new Error('响应 JSON 解析失败: ' + e.message)); }
-      });
-    });
-    req.on('error', reject);
-    req.setTimeout(15000, () => req.destroy(new Error('请求超时')));
-  });
-}
-
-// 从旧 Gist 一次性拉取 board.json 写入磁盘。需要临时环境变量 GIST_ID + GITHUB_TOKEN。
-async function migrateFromGistOnce() {
-  const gistId = process.env.GIST_ID;
-  const token = process.env.GITHUB_TOKEN;
-  if (!gistId || !token) return false;          // 未配置 → 不迁移
-  if (fs.existsSync(BOARD_FILE)) return false;  // 磁盘已有数据 → 不覆盖
-  try {
-    console.log('[迁移] 尝试从旧 GitHub Gist 一次性导入数据…');
-    const data = await httpsGetJson(`https://api.github.com/gists/${gistId}`, {
-      Authorization: `token ${token}`,
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'travel-board-migrate'
-    });
-    const files = data.files || {};
-    const file = files['board.json'] || Object.values(files)[0];
-    if (!file || !file.content) { console.warn('[迁移] Gist 中未找到 board.json，跳过'); return false; }
-    fs.writeFileSync(BOARD_FILE, file.content, 'utf8');
-    console.log('[迁移] ✅ 已从 Gist 导入 board.json 到持久磁盘（一次性；可移除 GIST_ID/GITHUB_TOKEN 环境变量）');
-    return true;
-  } catch (e) {
-    console.warn('[迁移] 从 Gist 导入失败（不影响启动，磁盘将从空数据开始）：', e.message);
-    return false;
-  }
-}
-
-// 确保磁盘上有 board.json：Gist 优先，其次仓库种子文件。
-async function ensureBoardFile() {
-  if (fs.existsSync(BOARD_FILE)) return;        // 磁盘已有数据，跳过
-  const fromGist = await migrateFromGistOnce();
-  if (!fromGist && fs.existsSync(SEED_FILE)) {
-    try {
-      fs.copyFileSync(SEED_FILE, BOARD_FILE);
-      console.log('[迁移] ✅ 已从仓库种子文件 seed-board.json 播种到持久磁盘');
-    } catch (e) { console.warn('[迁移] 种子文件导入失败：', e.message); }
-  }
-}
 
 // 服务端密钥（持久化到文件，重启后仍稳定 → token 可跨重启有效）
 function loadOrCreateSecret() {
@@ -313,7 +255,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function boot() {
-  await ensureBoardFile();   // 一次性迁移：Gist（需 GIST_ID/GITHUB_TOKEN）或仓库 seed-board.json
   await loadBoard();
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ 旅行规划工作台后端已启动： http://localhost:${PORT}`);

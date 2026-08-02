@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /* ============================================================
-   部署后自检：确认 Render 服务在线、持久磁盘(local)已挂载、且数据
-   已从旧 Gist / seed-board.json 成功导入。
+   部署后自检：确认 Render 服务在线、持久磁盘(local)已挂载、且看板已有数据。
    用法：
      node tools/check-deploy.js --url https://your-app.onrender.com --password 你的密码
    或环境变量：
@@ -83,7 +82,7 @@ function getJson(url, opts = {}) {
   const cands = (data.candidates || []).length;
   console.log('  ✓ 看板已载入：目的地 ' + dests + ' 个，行程库 ' + cands + ' 条');
   if (dests === 0 && cands === 0) {
-    console.warn('  ⚠ 看板为空——迁移可能未生效。请确认：GIST_ID/GITHUB_TOKEN 已填且正确，或仓库已提交 seed-board.json 并重新部署。');
+    console.warn('  ⚠ 看板为空——若预期应有数据，请确认持久磁盘(travel-data)已挂载且 /data 下 board.json 存在（首次部署或清空后会为空）。');
     process.exit(6);
   }
   console.log('✅ 部署自检通过：服务在线、磁盘(local)已挂载、数据已成功导入持久磁盘。');
