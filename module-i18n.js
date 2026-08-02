@@ -10,10 +10,9 @@ window.I18N = {
   dict: {
     zh: {
       // 顶部栏
-      'app.title': '私人旅行规划工作台',
-      'app.subtitle': '6 大核心板块 · 永久存档 · 服务端存储 / 多人协作',
+      'app.title': '旅行规划工作台',
+      'app.subtitle': '6 大核心板块 · 服务端存储 / 多人协作',
       'header.backup': '💾 备份/恢复',
-      'header.export': '📥 一键导出全部 Excel',
       'lang.toggle': '🌐 EN',
       // 导航
       'nav.home': '🏠 工作台总览',
@@ -66,7 +65,7 @@ window.I18N = {
       'status.disconnected': '连接中断',
       'status.connectError': '连接失败',
       // 提示 toast
-      'toast.welcome': '👋 欢迎使用私人旅行规划工作台！请在「板块1」新建您的第一个目的地档案。',
+      'toast.welcome': '👋 欢迎使用旅行规划工作台！请在「板块1」新建您的第一个目的地档案。',
       'toast.loaded': '已载入 {n} 个目的地档案',
       'toast.boardConnected': '已连接到旅行看板（账号：{u}）',
       'toast.migrated': '已从浏览器本地备份迁移 {n} 个目的地到你的旅行看板',
@@ -104,10 +103,9 @@ window.I18N = {
       'map.needKey': '⚠️ 尚未配置 Google Maps API Key。请到 Render 控制台给本服务添加环境变量 <code>GMAPS_API_KEY</code>（后端会自动注入前端），并在 Google Cloud 启用 <b>Maps JavaScript API</b> 与 <b>Geocoding API</b>，重新部署后刷新即可显示地图。下方列表仍可正常查看地点。',
       'map.fallback': '⚠️ Google Maps 未能加载。常见原因：① Key 未启用 <b>Maps JavaScript API</b> 与 <b>Geocoding API</b>；② Key 的「应用限制」(HTTP 引荐来源 / 网站限制) 未包含本站点域名；③ 网络被拦截。请到 Google Cloud 控制台核对后刷新。下方列表仍可正常查看地点。',
       // 各板块标题与主按钮
-      'dest.homeTitle': '🏠 私人旅行工作台 · 总览',
+      'dest.homeTitle': '🏠 旅行工作台 · 总览',
       'dest.title': '📍 板块1 · 目的地总览档案库',
       'dest.newBtn': '➕ 新建目的地档案',
-      'dest.aiBtn': '📥 粘贴 AI 建档',
       'itinerary.title': '🗓️ 板块2 · 每日行程表（时间轴）',
       'itinerary.recalc': '🚗 全部重算',
       'itinerary.autoGen': '⚡ 按日期自动生成空白日程',
@@ -143,9 +141,8 @@ window.I18N = {
     },
     en: {
       'app.title': 'Travel Planner Workspace',
-      'app.subtitle': '6 core modules · Permanent archive · Server storage / Collaboration',
+      'app.subtitle': '6 core modules · Server storage / Collaboration',
       'header.backup': '💾 Backup',
-      'header.export': '📥 Export All (Excel)',
       'lang.toggle': '🌐 中文',
       'nav.home': '🏠 Overview',
       'nav.dest': '📍 1·Destinations',
@@ -229,7 +226,6 @@ window.I18N = {
       'dest.homeTitle': '🏠 Travel Workspace · Overview',
       'dest.title': '📍 1·Destinations',
       'dest.newBtn': '➕ New destination profile',
-      'dest.aiBtn': '📥 Paste AI profile',
       'itinerary.title': '🗓️ 2·Daily Itinerary (Timeline)',
       'itinerary.recalc': '🚗 Recalculate all',
       'itinerary.autoGen': '⚡ Auto-generate empty days',

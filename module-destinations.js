@@ -100,7 +100,7 @@ app.modules.destinations = {
         <div class="card-title">
           <span>${app.t('dest.title')}</span>
           <button class="btn btn-primary ml-auto" onclick="app.modules.destinations.newDest()">${app.t('dest.newBtn')}</button>
-          <button class="btn btn-success" onclick="app.modules.destinations.showImportJSON()">${app.t('dest.aiBtn')}</button>
+          <!-- 「📥 粘贴 AI 建档」按钮已按需求移除；showImportJSON() 仍保留，需要时可重新挂回 -->
         </div>
         <p class="text-sm text-slate-600 mb-4">每一个目的地 = 一份独立档案。字段精简为：目的地名称、起止日期（出行天数自动按日期计算）、同行人数、总预算、备注。</p>
 

@@ -1,6 +1,6 @@
 /* =====================================================================
-   私人专属旅行规划工作台 - 主应用
-   - 永久存档（localStorage）
+   旅行规划工作台 - 主应用
+   - 本地存储（localStorage）
    - 6大核心板块固定
    - 状态管理 + UI 控制
    ===================================================================== */
@@ -46,7 +46,7 @@ const app = {
       this.startBackend();
       return;
     }
-    // 本地模式（默认）：localStorage 永久存档
+    // 本地模式（默认）：localStorage 持久化存储
     this.loadState();
     if (typeof this.ensureChecklists === 'function') this.ensureChecklists();
     this.bindNavTabs();

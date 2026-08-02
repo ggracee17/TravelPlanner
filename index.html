@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>私人专属旅行规划一体化工作台</title>
+  <title>旅行规划一体化工作台</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="utility.css" />
   <script>
@@ -28,8 +28,8 @@
       <div class="flex items-center gap-2">
         <span class="text-2xl">🧭</span>
         <div>
-          <h1 class="text-lg font-bold text-slate-800 leading-none" data-i18n="app.title">私人旅行规划工作台</h1>
-          <p class="text-tiny text-slate-500" data-i18n="app.subtitle">6 大核心板块 · 永久存档 · 服务端存储 / 多人协作</p>
+          <h1 class="text-lg font-bold text-slate-800 leading-none" data-i18n="app.title">旅行规划工作台</h1>
+          <p class="text-tiny text-slate-500" data-i18n="app.subtitle">6 大核心板块 · 服务端存储 / 多人协作</p>
         </div>
       </div>
       <div class="flex-1"></div>
@@ -39,7 +39,8 @@
       <!-- 中英切换：暂时隐藏（app.i18nEnabled=false）；需要时把 hidden 去掉并把该开关改为 true -->
       <button id="langToggle" class="btn btn-ghost btn-sm hidden" onclick="app.toggleLang()" data-i18n="lang.toggle">🌐 EN</button>
       <button class="btn btn-success btn-sm" onclick="app.openBackupDialog()" data-i18n="header.backup">💾 备份/恢复</button>
-      <button class="btn btn-primary btn-sm" onclick="app.exportAll()" data-i18n="header.export">📥 一键导出全部 Excel</button>
+      <!-- 「📥 一键导出全部 Excel」按钮已按需求移除；app.exportAll() 仍保留，
+           各板块（记账 / 核对清单）自带的导出按钮不受影响。 -->
     </div>
 
     <!-- 当前目的地切换条 -->
