@@ -730,26 +730,32 @@ app.modules.itinerary = {
     if (!parsed) return app.toast('无法解析该链接（短链接 maps.app.goo.gl 暂不支持，请粘贴含 @坐标 或 /place/名称 的完整链接）', 'warning');
     app.toast('正在根据地图链接获取地址…', 'success');
     try {
+      // 先确保 Google Maps（含 Geocoder）已加载，便于后续正向/反向地理编码
+      await new Promise(res => { (app.modules.map && app.modules.map.ensureMaps) ? app.modules.map.ensureMaps(res) : res(); });
       let coords = null;
       if (parsed.lat != null) {
         coords = { lat: parsed.lat, lng: parsed.lng };
-        const addr = await this.reverseGeocode(coords.lat, coords.lng);
-        if (addr) this._setField('t_addr', addr);
       } else if (parsed.name) {
         const g = (app.modules.map && app.modules.map.geocode) ? await app.modules.map.geocode(parsed.name) : null;
-        if (g) {
-          coords = { lat: g.lat, lng: g.lng };
-          const addr = await this.reverseGeocode(g.lat, g.lng);
-          if (addr) this._setField('t_addr', addr);
-        } else {
-          this._setField('t_addr', parsed.name);
-        }
+        if (g) { coords = { lat: g.lat, lng: g.lng }; }
+        else { this._setField('t_addr', parsed.name); this._pendingCoords = null; app.toast('未解析到坐标，已填入名称（可手动修正）', 'success'); return; }
       }
+      const addr = await this._reverseToAddress(coords);
+      if (addr) this._setField('t_addr', addr);
       this._pendingCoords = coords;
-      app.toast(coords ? '已自动填入地址（地图链接仅用于获取地址）' : '已填入名称，未解析到坐标', 'success');
+      app.toast(addr ? '已自动填入地址' : '未能获取地址（检查网络 / Google Key，或手动填写）', addr ? 'success' : 'warning');
     } catch (e) {
       app.toast('获取失败：' + (e && e.message ? e.message : e), 'error');
     }
+  },
+
+  // 坐标 → 地址：优先 Google 反向地理编码（需 Key + Maps 已加载，自带 CORS 可靠），兜底 Nominatim（免 Key 但浏览器端可能受限）
+  async _reverseToAddress(coords) {
+    if (app.modules.map && app.modules.map.reverseGeocodeGoogle) {
+      const a = await app.modules.map.reverseGeocodeGoogle(coords.lat, coords.lng);
+      if (a) return a;
+    }
+    return this.reverseGeocode(coords.lat, coords.lng);
   },
 
   deleteTrip(dayId, spotId) {

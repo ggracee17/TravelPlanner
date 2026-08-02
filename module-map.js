@@ -149,6 +149,21 @@ app.modules.map = {
     return this.geocode(q).then(r => { if (r) this._geoCache[q] = r; else this._geoFail.add(q); return r; });
   },
 
+  /* Google 反向地理编码：坐标 → 地址（与正向 geocode 共用已加载的 Geocoder）。
+     浏览器端更可靠（Google 自带 CORS），优于 Nominatim；无 Key / Maps 未加载时返回 null。 */
+  reverseGeocodeGoogle(lat, lng) {
+    return new Promise((resolve) => {
+      if (!gmapsKey() || typeof window === 'undefined' || !window.google || !window.google.maps || !window.google.maps.Geocoder) { resolve(null); return; }
+      try {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+          if (status === 'OK' && results && results[0]) resolve(results[0].formatted_address || '');
+          else resolve(null);
+        });
+      } catch (e) { resolve(null); }
+    });
+  },
+
   async showMap() {
     const items = this.collectSpots(this._sel());
     if (!gmapsKey() || this._failed || typeof window === 'undefined' || !window.google || !window.google.maps) {
