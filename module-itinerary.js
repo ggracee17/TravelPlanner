@@ -519,8 +519,9 @@ app.modules.itinerary = {
         destinations: validD,
         travelMode: (window.google.maps.TravelMode || {})[mode.toUpperCase()] || mode,
         unitSystem: (window.google.maps.UnitSystem || {}).METRIC || 'METRIC',
-        avoidFerries: false,
-        provideRouteAlternatives: false
+        avoidFerries: false
+        // 注意：provideRouteAlternatives 是 DirectionsService 的字段，DistanceMatrixService 不支持，
+        // 传入会导致 InvalidValueError: unknown property provideRouteAlternatives。
       }, (resp, status) => {
         if (status !== 'OK' || !resp || !resp.rows) {
           app.toast('Google 交通时间计算失败：' + status, 'error');
