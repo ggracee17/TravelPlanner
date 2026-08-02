@@ -69,12 +69,20 @@ app.modules.itinerary = {
     const bucket = app.state[d.id] || {};
     const days = (bucket.itinerary || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const expanded = !!app.state.itineraryExpand;
+    const travMode = app.state.itineraryTravelMode || 'transit';
 
     sec.innerHTML = `
       <div class="card">
         <div class="card-title">
           <span>🗓️ 板块2 · 每日行程表（时间轴）</span>
-          <div class="ml-auto flex gap-2">
+          <div class="ml-auto flex gap-2 items-center">
+            <label class="text-sm text-slate-600 whitespace-nowrap">交通方式</label>
+            <select id="itinTravelMode" class="text-sm border border-slate-300 rounded px-2 py-1" onchange="app.modules.itinerary.setTravelMode(this.value)">
+              <option value="driving" ${travMode === 'driving' ? 'selected' : ''}>🚗 驾车</option>
+              <option value="walking" ${travMode === 'walking' ? 'selected' : ''}>🚶 步行</option>
+              <option value="transit" ${travMode === 'transit' ? 'selected' : ''}>🚌 公交/地铁</option>
+              <option value="bicycling" ${travMode === 'bicycling' ? 'selected' : ''}>🚲 骑行</option>
+            </select>
             <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleZoom()">${app.state.itineraryZoom === 'compact' ? '🔍 宽松视图' : '🔍 紧凑视图'}</button>
             <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleExpand()">${expanded ? '🔼 收起空白' : '🔽 展开全部时间'}</button>
             <button class="btn btn-warning" onclick="app.modules.itinerary.autoGenDays()">⚡ 按日期自动生成空白日程</button>
@@ -151,6 +159,7 @@ app.modules.itinerary = {
             <div class="text-xs opacity-90">${day.weather || '天气未填'}　·　行程块 ${spots.length} 个　·　门票 ¥${totalTicket.toFixed(0)}</div>
           </div>
           <div class="flex gap-2">
+            <button class="btn btn-ghost btn-sm" onclick="app.modules.itinerary.computeTravel('${day.id}')" title="用 Google 计算相邻行程点之间的交通时间（按顶部所选交通方式）">🚗 交通时间</button>
             <button class="btn btn-primary btn-sm" onclick="app.modules.itinerary.openTripForm('spot','${day.id}','')">➕ 添加</button>
             <button class="btn btn-ghost btn-sm" onclick="app.modules.itinerary.editDay('${day.id}')">✏️ 日期</button>
             <button class="btn btn-danger btn-sm" onclick="app.modules.itinerary.removeDay('${day.id}')">🗑️</button>
@@ -216,6 +225,7 @@ app.modules.itinerary = {
           <div class="tl-block-title">${s.name || '未命名'}</div>
           ${isXShort ? '' : `<div class="tl-block-time">${s.startTime || '--:--'}–${itinEndTime(s.startTime, dur)} · ${dur}h</div>`}
           ${flags ? `<div class="tl-flags">${flags}</div>` : ''}
+          ${!isXShort && s.travelFromPrev ? `<div class="tl-travel">${this.travelIcon(s.travelFromPrev.mode)} ${s.travelFromPrev.durText}${s.travelFromPrev.distText ? ' · ' + s.travelFromPrev.distText : ''}${s.travelFromPrev.unavailable ? '（无法计算）' : '　距上一站'}</div>` : ''}
         </div>
       </div>`;
   },
@@ -401,9 +411,144 @@ app.modules.itinerary = {
     found.startTime = newStart;
     toDay.spots.push(found);
     toDay.spots.sort((a, b) => itinTimeToNum(a.startTime) - itinTimeToNum(b.startTime));
+    this.clearTravelForDay(fromDay.id);   // 移动后相邻段交通时间已失效，清除待重算
+    this.clearTravelForDay(toDay.id);
     app.saveState();
     app.renderAll();
     app.toast('已调整行程时间', 'success');
+  },
+
+  /* ===== 相邻行程点交通时间（Google Distance Matrix） ===== */
+  travelIcon(mode) {
+    return ({ driving: '🚗', walking: '🚶', transit: '🚌', bicycling: '🚲' })[mode] || '🚗';
+  },
+
+  setTravelMode(mode) {
+    app.state.itineraryTravelMode = mode;
+    app.saveState();
+    const label = this.travelIcon(mode) + ({ driving: '驾车', walking: '步行', transit: '公交/地铁', bicycling: '骑行' })[mode] || mode;
+    app.toast('交通方式已设为 ' + label + '，点每天的「🚗 交通时间」重新计算', 'info');
+  },
+
+  clearTravelForDay(dayId) {
+    const d = app.getActiveDestination();
+    if (!d) return;
+    const day = (app.state[d.id]?.itinerary || []).find(x => x.id === dayId);
+    if (!day || !day.spots) return;
+    day.spots.forEach(s => { s.travelFromPrev = null; });
+  },
+
+  _clearTravelAllDays() {
+    const d = app.getActiveDestination();
+    if (!d) return;
+    (app.state[d.id]?.itinerary || []).forEach(day => { if (day.spots) day.spots.forEach(s => { s.travelFromPrev = null; }); });
+  },
+
+  computeTravel(dayId) {
+    const key = (typeof window !== 'undefined' && window.BOARD_CONFIG && window.BOARD_CONFIG.gmapsApiKey) || '';
+    if (!key) {
+      app.toast('需先配置 Google Maps API Key（环境变量 GMAPS_API_KEY）并启用 Distance Matrix API', 'error', 7000);
+      return;
+    }
+    const mode = app.state.itineraryTravelMode || 'transit';
+    const d = app.getActiveDestination();
+    if (!d) return;
+    const day = (app.state[d.id]?.itinerary || []).find(x => x.id === dayId);
+    if (!day || !day.spots || day.spots.length < 2) {
+      app.toast('至少需要 2 个行程块才能计算交通时间', 'warning');
+      return;
+    }
+    app.toast('正在用 Google 计算交通时间…', 'info');
+    let p = Promise.resolve();
+    app.modules.map.ensureMaps(() => {
+      const gm = window.google && window.google.maps;
+      if (!gm || !gm.DistanceMatrixService) {
+        app.toast('Google Maps 未就绪，请刷新页面后重试', 'error');
+        return;
+      }
+      p = this._computeTravelRun(dayId, mode);
+    });
+    return p;
+  },
+
+  async _computeTravelRun(dayId, mode) {
+    try {
+      const d = app.getActiveDestination();
+      const day = (app.state[d.id]?.itinerary || []).find(x => x.id === dayId);
+      if (!day) return;
+      const spots = (day.spots || []).slice().sort((a, b) => itinTimeToNum(a.startTime) - itinTimeToNum(b.startTime));
+      if (spots.length < 2) return;
+
+      // 1) 缺坐标的行程块先按「名称 + 地址」地理编码获取坐标
+      for (const s of spots) {
+        if (s.lat == null || s.lng == null) {
+          const q = (s.name || '') + (s.address ? ' ' + s.address : '');
+          const g = await app.modules.map.geocodeCached(q);
+          if (g) { s.lat = g.lat; s.lng = g.lng; }
+        }
+      }
+      const noCoord = spots.filter(s => s.lat == null || s.lng == null);
+      if (noCoord.length) {
+        app.toast('以下地点无法定位（建议填地址或经纬度）：' + noCoord.map(s => s.name).join('、'), 'warning', 6000);
+      }
+
+      // 2) 构造相邻错位坐标对：origins[i] → destinations[i] = spots[i] → spots[i+1]
+      const origins = [], dests = [];
+      for (let i = 0; i < spots.length - 1; i++) { origins.push(spots[i]); dests.push(spots[i + 1]); }
+      const validO = [], validD = [], validIdx = [];
+      for (let i = 0; i < origins.length; i++) {
+        if (origins[i].lat != null && origins[i].lng != null && dests[i].lat != null && dests[i].lng != null) {
+          validO.push({ lat: origins[i].lat, lng: origins[i].lng });
+          validD.push({ lat: dests[i].lat, lng: dests[i].lng });
+          validIdx.push(i);
+        }
+      }
+      // 先清空旧的交通时间（按当前顺序），稍后只回填有效段
+      spots.forEach(s => { s.travelFromPrev = null; });
+
+      if (validO.length === 0) {
+        app.saveState();
+        app.renderAll();
+        app.toast('没有可计算的坐标对', 'warning');
+        return;
+      }
+
+      const service = new window.google.maps.DistanceMatrixService();
+      service.getDistanceMatrix({
+        origins: validO,
+        destinations: validD,
+        travelMode: (window.google.maps.TravelMode || {})[mode.toUpperCase()] || mode,
+        unitSystem: (window.google.maps.UnitSystem || {}).METRIC || 'METRIC',
+        avoidFerries: false,
+        provideRouteAlternatives: false
+      }, (resp, status) => {
+        if (status !== 'OK' || !resp || !resp.rows) {
+          app.toast('Google 交通时间计算失败：' + status, 'error');
+          app.saveState();
+          app.renderAll();
+          return;
+        }
+        validIdx.forEach((segIdx, k) => {
+          const el = resp.rows[k] && resp.rows[k].elements && resp.rows[k].elements[k];
+          const target = dests[segIdx];
+          if (el && el.status === 'OK') {
+            target.travelFromPrev = {
+              mode,
+              durText: el.duration ? el.duration.text : '',
+              durMin: el.duration ? el.duration.value / 60 : 0,
+              distText: el.distance ? el.distance.text : ''
+            };
+          } else {
+            target.travelFromPrev = { mode, unavailable: true };
+          }
+        });
+        app.saveState();
+        app.renderAll();
+        app.toast('交通时间已计算（' + validIdx.length + ' 段）', 'success');
+      });
+    } catch (e) {
+      app.toast('交通时间计算出错：' + (e && e.message ? e.message : e), 'error');
+    }
   },
 
   // 计算新行程块放入某天后的默认开始时间（接在最后一块之后）
@@ -601,7 +746,9 @@ app.modules.itinerary = {
       }
       Object.assign(spot, common, sched);
       day.spots.sort((x, y) => itinTimeToNum(x.startTime) - itinTimeToNum(y.startTime));
+      this.clearTravelForDay(a);   // 行程块内容/顺序变更，相邻段交通时间待重算
     } else {
+      this._clearTravelAllDays();   // 行程库改动可能同步到多天，统一清除待重算
       // 行程库编辑 / 新增：与行程表同一套字段，并可直接加入 / 移动到行程表的日期
       const cands = app.state.candidates || (app.state.candidates = []);
       let cand;
@@ -688,6 +835,7 @@ app.modules.itinerary = {
     const day = (app.state[d.id].itinerary || []).find(x => x.id === dayId);
     if (!day) return;
     day.spots = (day.spots || []).filter(s => s.id !== spotId);
+    this.clearTravelForDay(dayId);
     app.saveState();
     app.closeModal();
     app.renderAll();

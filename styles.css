@@ -416,6 +416,11 @@ table.data-table tr:hover td { background: #f8fafc; }
 }
 .tl-block-time { font-size: 0.66rem; color: #475569; margin-top: 1px; }
 .tl-flags { margin-top: 1px; }
+/* 相邻行程点交通时间（Google Distance Matrix 计算结果），显示在行程块内底部 */
+.tl-travel {
+  font-size: 0.62rem; line-height: 1.2; color: #0e7490; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.95;
+}
 /* 分类小字：置于行程块左侧，竖排显示 */
 .tl-block-cat-v {
   flex: none;
