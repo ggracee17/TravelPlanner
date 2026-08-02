@@ -191,10 +191,15 @@ const server = http.createServer(async (req, res) => {
   // --- 动态配置：后端部署时启用后端模式 ---
   if (pathname === '/config.js') {
     const base = process.env.BOARD_BASE || '';
-    // 默认关闭后端模式：Render 免费版不能挂持久磁盘，后端写入的 /data 是临时目录、每次重新部署被清空；
-    // 关闭后端后前端走 localStorage（浏览器存档），数据随浏览器保留、跨部署不丢。
-    // 若日后升级到付费实例并挂载持久磁盘，可设环境变量 BOARD_BACKEND=1 重新开启后端模式。
-    const backendEnabled = process.env.BOARD_BACKEND === '1';
+    const ds = checkStorage();
+    // 后端模式开启条件（满足任一即启用）：
+    //   1) 显式环境变量 BOARD_BACKEND=1；
+    //   2) 检测到持久磁盘已挂载到 DATA_DIR（付费实例专属）。
+    // 自愈：只要持久磁盘挂上就自动启用后端，不再单纯依赖环境变量是否被 Render 正确注入，
+    // 避免「部署后仍是本地模式、不弹密码、不显示在线人数、跨设备看不到数据」的坑。
+    // 免费实例无持久磁盘 → ds.mounted 为 false 且无 BOARD_BACKEND → 走 localStorage 本地模式（安全）。
+    const backendEnabled = process.env.BOARD_BACKEND === '1' || ds.mounted;
+    console.log(`[config] 后端模式=${backendEnabled} (BOARD_BACKEND=${process.env.BOARD_BACKEND || '(空)'}, 磁盘挂载=${ds.mounted})`);
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
     res.end(`window.BOARD_CONFIG = { enabled: ${backendEnabled}, base: ${JSON.stringify(base)}, storage: 'local', gmapsApiKey: ${JSON.stringify(process.env.GMAPS_API_KEY || '')} };`);
     return;
