@@ -104,7 +104,7 @@ app.modules.checklists = {
           <span>📄 证件手续清单（已勾选 ${docsChecked} / ${docs.length}）</span>
           <div class="ml-auto flex gap-2">
             <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addDoc()">➕ 新增项</button>
-            <button class="btn btn-warning btn-sm" onclick="app.modules.checklists.uncheckAll('documents')">⭕ 全部取消勾选</button>
+            <button class="btn btn-warning btn-sm" onclick="app.modules.checklists.uncheckAll('documents')">○ 全部取消勾选</button>
           </div>
         </div>
         <div id="docList">
@@ -119,7 +119,7 @@ app.modules.checklists = {
           <div class="ml-auto flex gap-2">
             <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addLug()">➕ 新增项</button>
             <button class="btn btn-warning btn-sm" onclick="app.modules.checklists.autoAdjustLug()">🤖 按气候自动调整</button>
-            <button class="btn btn-ghost btn-sm" onclick="app.modules.checklists.uncheckAll('luggage')">⭕ 全部取消勾选</button>
+            <button class="btn btn-ghost btn-sm" onclick="app.modules.checklists.uncheckAll('luggage')">○ 全部取消勾选</button>
           </div>
         </div>
         <p class="text-tiny text-slate-500 mb-2">已按品类分组：衣物 / 洗护 / 电子设备 / 药品 / 随身杂物</p>

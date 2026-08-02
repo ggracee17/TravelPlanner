@@ -1,6 +1,6 @@
 /* ===== 基础排版 ===== */
 * { box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif; }
 
 /* ===== 导航 Tab ===== */
 .tab-btn {
