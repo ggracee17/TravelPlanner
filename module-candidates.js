@@ -14,7 +14,7 @@ app.modules.candidates = {
     const sec = document.querySelector('[data-section=candidates]');
     if (!sec) return;
 
-    const cands = app.state.candidates || (app.state.candidates = []);
+    const cands = Array.isArray(app.state.candidates) ? app.state.candidates : (app.state.candidates = []);
     const d = app.getActiveDestination();
 
     // 统计每个行程库项目当前落入的日期（用于排序与勾选态提示）
@@ -132,7 +132,7 @@ app.modules.candidates = {
 
   /* ===== 勾选 → 加入 / 移除 每日行程 ===== */
   toggleCandidate(id) {
-    const cands = app.state.candidates || (app.state.candidates = []);
+    const cands = Array.isArray(app.state.candidates) ? app.state.candidates : (app.state.candidates = []);
     const c = cands.find(x => x.id === id);
     if (!c) return;
     const want = !c.checked;
@@ -189,7 +189,7 @@ app.modules.candidates = {
 
   deleteCandidate(id) {
     if (!confirm('确定删除这条行程库项目？')) return;
-    const cands = app.state.candidates || (app.state.candidates = []);
+    const cands = Array.isArray(app.state.candidates) ? app.state.candidates : (app.state.candidates = []);
     const c = cands.find(x => x.id === id);
     if (c && c.checked) this.removeFromItinerary(id);
     app.state.candidates = cands.filter(x => x.id !== id);

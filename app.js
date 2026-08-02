@@ -446,17 +446,33 @@ const app = {
           // 合并：去重 destination
           const existIds = new Set(this.state.destinations.map(d => d.id));
           (data.destinations || []).forEach(d => { if (!existIds.has(d.id)) this.state.destinations.push(d); });
-          // 合并子数据
+          // 合并子数据：顶层数组按 id 去重追加；对象（各目的地数据桶）按字段合并
           Object.keys(data).forEach(k => {
             if (k === 'destinations' || k === 'activeDestinationId') return;
             if (k === 'checklists') {
               this.state.checklists.documents = [...(this.state.checklists.documents || []), ...(data.checklists?.documents || [])];
               this.state.checklists.luggage = [...(this.state.checklists.luggage || []), ...(data.checklists?.luggage || [])];
             } else {
-              this.state[k] = { ...(this.state[k] || {}), ...(data[k] || {}) };
+              const cur = this.state[k], inc = data[k];
+              // candidates / searchHistory 等顶层数组：按 id 去重追加，绝不能当对象 spread（否则 .map 会崩）
+              if (Array.isArray(cur) || Array.isArray(inc)) {
+                const arr = Array.isArray(cur) ? cur.slice() : [];
+                const ids = new Set(arr.filter(x => x && x.id).map(x => x.id));
+                (Array.isArray(inc) ? inc : []).forEach(x => {
+                  if (x && x.id) { if (ids.has(x.id)) return; ids.add(x.id); }
+                  arr.push(x);
+                });
+                this.state[k] = arr;
+              } else {
+                this.state[k] = { ...(cur || {}), ...(inc || {}) };
+              }
             }
           });
         }
+        // 兜底：确保顶层数组字段为数组，避免渲染时 .map 崩溃
+        ['destinations', 'candidates', 'searchHistory'].forEach(k => {
+          if (!Array.isArray(this.state[k])) this.state[k] = [];
+        });
         this.saveState();
         this.renderAll();
         this.closeModal();
