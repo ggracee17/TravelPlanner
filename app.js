@@ -524,7 +524,7 @@ const app = {
   openModal(title, bodyHtml, actions = []) {
     const root = document.getElementById('modalRoot');
     root.innerHTML = `
-      <div class="modal-backdrop" onclick="if(event.target===this) app.closeModal()">
+      <div class="modal-backdrop">
         <div class="modal">
           <div class="modal-header">
             <h3 class="font-semibold text-lg">${title}</h3>

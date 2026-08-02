@@ -420,7 +420,6 @@ table.data-table tr:hover td { background: #f8fafc; }
 .tl-block-cat-v {
   flex: none;
   writing-mode: vertical-rl;
-  transform: rotate(180deg);
   display: flex; align-items: center; justify-content: center;
   width: 15px;
   font-size: 0.58rem; font-weight: 700; line-height: 1;

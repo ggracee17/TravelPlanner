@@ -5,17 +5,19 @@ services:
   - type: web
     name: travel-board
     runtime: node
-    plan: free            # 免费额度，足够家庭出行规划；注意免费版会休眠、且磁盘非持久
+    plan: free            # 免费额度，足够家庭出行规划；免费版会休眠，但挂了持久磁盘后数据不丢
     buildCommand: "npm install"
     startCommand: "node server.js"
     healthCheckPath: "/"  # 服务根路径返回 200，Render 据此判定已启动
     envVars:
       - key: BOARD_PASSWORD
         sync: false       # 部署后在 Render 控制台手动设置你的强密码（务必设置，否则用默认弱密码）
-      # 持久化：设置以下两个变量后，数据存到你的私人 GitHub Gist，重部署不会丢失
-      # （免费版 Render 磁盘是临时的，每次 git push 重部署会清空 data/）
-      - key: GIST_ID
-        sync: false       # 你的私人 Gist ID（新建一个 Gist 后，URL 中 /gist/ 后面那串字符）
-      - key: GITHUB_TOKEN
-        sync: false       # 具备 gist 权限的 GitHub Personal Access Token
+      # 持久化：数据写本地文件 DATA_DIR。把下方 disks 持久磁盘挂到 /data，并设 DATA_DIR=/data，
+      # 即可在重部署/休眠后保留数据，且零外部 API 调用（不再用 GitHub Gist，避免触发限流）。
+      - key: DATA_DIR
+        value: /data
       # PORT 由 Render 自动注入，server.js 已通过 process.env.PORT 读取，无需设置
+    disks:
+      - name: travel-data
+        mountPath: /data
+        sizeGB: 1

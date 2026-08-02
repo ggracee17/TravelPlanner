@@ -23,6 +23,8 @@ app.modules.map = {
   _failed: false,
   _cbs: [],
   _lastBounds: null,
+  _geoCache: {},        // 会话内地理编码结果缓存（query → {lat,lng}），避免重复消耗配额
+  _geoFail: new Set(),  // 会话内地理编码失败的 query，避免重复调用
 
   render() {
     const sec = document.querySelector('[data-section=map]');
@@ -136,6 +138,12 @@ app.modules.map = {
     });
   },
 
+  geocodeCached(q) {
+    if (this._geoCache[q]) return Promise.resolve(this._geoCache[q]);
+    if (this._geoFail.has(q)) return Promise.resolve(null);
+    return this.geocode(q).then(r => { if (r) this._geoCache[q] = r; else this._geoFail.add(q); return r; });
+  },
+
   async showMap() {
     const items = this.collectSpots(this._sel());
     if (!GMAPS_API_KEY || this._failed || typeof window === 'undefined' || !window.google || !window.google.maps) {
@@ -145,17 +153,17 @@ app.modules.map = {
       else if (this._failed) this._noteMapFallback();
       return;
     }
-    // 地理编码缺失坐标
+    // 地理编码缺失坐标（带缓存与失败去重，避免重复消耗配额）
     let needSave = false;
     for (const it of items) {
       const s = it.spot;
-      if (s.lat == null || s.lng == null) {
-        const q = [s.name, s.address].filter(Boolean).join(' ').trim();
-        if (q) {
-          const g = await this.geocode(q);
-          if (g) { s.lat = g.lat; s.lng = g.lng; needSave = true; }
-        }
-      }
+      if (s.lat != null && s.lng != null) continue;            // 已有坐标，跳过
+      const q = [s.name, s.address].filter(Boolean).join(' ').trim();
+      if (!q) { if (!s._geoFailed) { s._geoFailed = true; needSave = true; } continue; } // 无名称/地址，无法定位
+      if (s._geoFailed && s._geoFailQ === q) continue;          // 同一查询曾失败，本次跳过（省配额）
+      const g = await this.geocodeCached(q);
+      if (g) { s.lat = g.lat; s.lng = g.lng; s._geoFailed = false; s._geoFailQ = ''; needSave = true; }
+      else { s._geoFailed = true; s._geoFailQ = q; needSave = true; } // 失败标记，下次同查询不再调用
     }
     if (needSave) app.saveState();
     const withCoord = items.filter(it => it.spot.lat != null && it.spot.lng != null);
@@ -224,7 +232,7 @@ app.modules.map = {
 
   _noteMapFallback() {
     const view = document.getElementById('mapView');
-    if (view) view.innerHTML = '<div class="map-fallback">⚠️ Google Maps 加载失败（可能 Key 无效、未启用对应 API 或网络被拦截），已下方列表展示地点。检查 Key 与 API 启用状态后刷新即可。</div>';
+    if (view) view.innerHTML = '<div class="map-fallback">⚠️ Google Maps 未能加载。常见原因：① Key 未启用 <b>Maps JavaScript API</b> 与 <b>Geocoding API</b>；② Key 的「应用限制」(HTTP 引荐来源 / 网站限制) 未包含本站点域名；③ 网络被拦截。请到 Google Cloud 控制台核对后刷新。下方列表仍可正常查看地点。</div>';
   },
 
   _esc(s) {

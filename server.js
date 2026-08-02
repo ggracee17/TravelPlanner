@@ -15,7 +15,7 @@ const crypto = require('crypto');
 
 const ROOT = __dirname;
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(ROOT, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 const BOARD_FILE = path.join(DATA_DIR, 'board.json');
 const SECRET_FILE = path.join(DATA_DIR, 'secret.txt');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
@@ -29,67 +29,10 @@ if (!process.env.BOARD_PASSWORD) {
   console.warn('[安全] 未设置环境变量 BOARD_PASSWORD，正在使用默认弱密码 "travel2026"，请尽快修改！');
 }
 
-// 持久化后端：设为 GITHUB_TOKEN + GIST_ID 时，数据存到私人 Gist（部署在 Render 之外，重部署不丢）
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '';
-const GIST_ID = process.env.GIST_ID || '';
-const USE_GIST = !!(GITHUB_TOKEN && GIST_ID);
-const GIST_FILENAME = 'board.json';
+// 持久化：数据存到本地文件（DATA_DIR，默认 ./data）。为了让数据在重部署/休眠后不丢，
+// 在 render.yaml 中把 Render「持久磁盘」挂到 DATA_DIR（见 disks 配置）。零外部 API 调用。
 
-function gistHeaders() {
-  return {
-    'Authorization': 'Bearer ' + GITHUB_TOKEN,
-    'Accept': 'application/vnd.github+json',
-    'User-Agent': 'travel-planner',
-    'Content-Type': 'application/json'
-  };
-}
-
-// 从 Gist 读取看板（失败返回 null，由调用方回退到本地缓存）
-function loadBoardFromGist() {
-  return new Promise((resolve) => {
-    const url = 'https://api.github.com/gists/' + GIST_ID;
-    const req = https.get(url, { headers: gistHeaders() }, (r) => {
-      let buf = '';
-      r.on('data', c => buf += c);
-      r.on('end', () => {
-        try {
-          if (r.statusCode === 200) {
-            const j = JSON.parse(buf);
-            const file = j.files && j.files[GIST_FILENAME];
-            if (file && file.content) { resolve(JSON.parse(file.content)); return; }
-          } else {
-            console.warn('[存储] Gist 读取失败 HTTP', r.statusCode, buf.slice(0, 200));
-          }
-        } catch (e) { console.warn('[存储] Gist 解析失败:', e.message); }
-        resolve(null);
-      });
-    });
-    req.on('error', e => { console.warn('[存储] Gist 网络错误:', e.message); resolve(null); });
-    req.end();
-  });
-}
-
-// 把看板写入 Gist（best-effort；失败仅告警，不丢本地缓存）
-function saveBoardToGist(state) {
-  return new Promise((resolve) => {
-    const body = JSON.stringify({ files: { [GIST_FILENAME]: { content: JSON.stringify(state, null, 2) } } });
-    const req = https.request('https://api.github.com/gists/' + GIST_ID, {
-      method: 'PATCH',
-      headers: Object.assign(gistHeaders(), { 'Content-Length': Buffer.byteLength(body) })
-    }, (r) => {
-      let buf = '';
-      r.on('data', c => buf += c);
-      r.on('end', () => {
-        if (r.statusCode === 200) console.log('[存储] 已写入 Gist');
-        else console.warn('[存储] Gist 写入失败 HTTP', r.statusCode, buf.slice(0, 200));
-        resolve();
-      });
-    });
-    req.on('error', e => { console.warn('[存储] Gist 写入网络错误:', e.message); resolve(); });
-    req.write(body);
-    req.end();
-  });
-}
+// （已移除 GitHub Gist 持久化；改用本地文件 + 持久磁盘，零外部 API 调用，避免触发 GitHub 限流）
 
 // 服务端密钥（持久化到文件，重启后仍稳定 → token 可跨重启有效）
 function loadOrCreateSecret() {
@@ -115,23 +58,11 @@ let writeChain = Promise.resolve(); // 序列化写操作，避免并发交错
 
 function loadBoard() {
   return (async () => {
-    if (USE_GIST) {
-      console.log('[存储] 使用 GitHub Gist 作为持久化（GIST_ID=' + GIST_ID + '）');
-      const gistState = await loadBoardFromGist();
-      if (gistState) {
-        boardState = gistState;
-        boardSig = JSON.stringify(boardState);
-        console.log('[存储] 已从 Gist 载入看板');
-        try { atomicWrite(BOARD_FILE, JSON.stringify(boardState, null, 2)); } catch (e) {} // 同步到本地缓存
-        return;
-      }
-      console.warn('[存储] Gist 无数据或读取失败，回退到本地缓存…');
-    }
     try {
       if (fs.existsSync(BOARD_FILE)) {
         boardState = JSON.parse(fs.readFileSync(BOARD_FILE, 'utf8'));
         boardSig = JSON.stringify(boardState);
-        console.log('[存储] 已从 data/board.json 载入看板');
+        console.log('[存储] 已从', BOARD_FILE, '载入看板');
       } else {
         console.log('[存储] 暂无看板数据（首次启动）');
       }
@@ -167,7 +98,7 @@ function saveBoard(state) {
     const payload = JSON.stringify(state, null, 2);
     atomicWrite(BOARD_FILE, payload);   // 本地缓存
     snapshotBackup();
-    if (USE_GIST) { await saveBoardToGist(state); }  // 云端持久化（重部署不丢）
+    // 数据已写入 DATA_DIR/board.json（挂载了持久磁盘则重部署/休眠后仍在）
     broadcast('state', { type: 'state', data: boardState });
     broadcast('presence', { type: 'presence', count: sseClients.size });
     return true;
@@ -240,7 +171,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/config.js') {
     const base = process.env.BOARD_BASE || '';
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-    res.end(`window.BOARD_CONFIG = { enabled: true, base: ${JSON.stringify(base)}, storage: ${JSON.stringify(USE_GIST ? 'gist' : 'local')} };`);
+    res.end(`window.BOARD_CONFIG = { enabled: true, base: ${JSON.stringify(base)}, storage: 'local' };`);
     return;
   }
 
@@ -249,7 +180,7 @@ const server = http.createServer(async (req, res) => {
     // 健康检查
     if (pathname === '/api/health' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, online: sseClients.size, storage: USE_GIST ? 'gist' : 'local' }));
+      res.end(JSON.stringify({ ok: true, online: sseClients.size, storage: 'local' }));
       return;
     }
 
@@ -330,7 +261,7 @@ async function boot() {
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ 旅行规划工作台后端已启动： http://localhost:${PORT}`);
     console.log(`   密码保护：单密码（环境变量 BOARD_PASSWORD，默认 "travel2026"）`);
-    console.log(`   永久存储：${USE_GIST ? 'GitHub Gist（重部署不丢）' : 'data/board.json（含 /data/backups 快照，重部署会被清空，建议配置 GIST_ID+GITHUB_TOKEN）'}`);
+    console.log(`   永久存储：本地文件 ${BOARD_FILE}（建议把 Render 持久磁盘挂到 ${DATA_DIR}，重部署/休眠后数据不丢）`);
     console.log(`   多人实时：SSE /api/stream`);
   });
 }
