@@ -126,7 +126,7 @@ const app = {
       return r.json();
     }).then(j => {
       if (j && j.data) {
-        this.state = j.data;
+        this.state = this.normalizeState(j.data);
         this._lastSig = JSON.stringify(this.state);
       }
       return this.state;
@@ -157,7 +157,7 @@ const app = {
   },
 
   applyRemote(data) {
-    this.state = data;
+    this.state = this.normalizeState(data);
     this._lastSig = JSON.stringify(this.state);
     if (typeof this.ensureChecklists === 'function') this.ensureChecklists();
     this.renderSwitcher();
@@ -214,12 +214,30 @@ const app = {
   },
 
   /* ====== 持久化 ====== */
+  // 修正状态结构异常（如合并导入 bug 曾把 candidates 错误转成 {0:..,1:..} 对象）。
+  // 用 Object.values 还原为数组，避免数据丢失；同时保证 checklists 结构完整。
+  normalizeState(s) {
+    if (!s || typeof s !== 'object') return s || {};
+    ['destinations', 'candidates', 'searchHistory'].forEach(k => {
+      if (s[k] == null) s[k] = [];
+      else if (!Array.isArray(s[k])) {
+        s[k] = (typeof s[k] === 'object') ? Object.values(s[k]) : [];
+      }
+    });
+    if (!s.checklists || typeof s.checklists !== 'object') s.checklists = { documents: [], luggage: [] };
+    else {
+      if (!Array.isArray(s.checklists.documents)) s.checklists.documents = (s.checklists.documents && typeof s.checklists.documents === 'object') ? Object.values(s.checklists.documents) : [];
+      if (!Array.isArray(s.checklists.luggage)) s.checklists.luggage = (s.checklists.luggage && typeof s.checklists.luggage === 'object') ? Object.values(s.checklists.luggage) : [];
+    }
+    return s;
+  },
+
   loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const data = JSON.parse(raw);
-        this.state = { ...this.state, ...data };
+        this.state = this.normalizeState({ ...this.state, ...data });
       }
     } catch (e) {
       console.error('数据加载失败：', e);
@@ -469,10 +487,8 @@ const app = {
             }
           });
         }
-        // 兜底：确保顶层数组字段为数组，避免渲染时 .map 崩溃
-        ['destinations', 'candidates', 'searchHistory'].forEach(k => {
-          if (!Array.isArray(this.state[k])) this.state[k] = [];
-        });
+        // 兜底：修正可能的结构异常（如曾被错误转成对象的 candidates）→ 还原为数组，避免数据丢失与渲染崩溃
+        this.normalizeState(this.state);
         this.saveState();
         this.renderAll();
         this.closeModal();
