@@ -28,8 +28,9 @@ if (!process.env.BOARD_PASSWORD) {
   console.warn('[安全] 未设置环境变量 BOARD_PASSWORD，正在使用默认弱密码 "travel2026"，请尽快修改！');
 }
 
-// 持久化：数据存到本地文件（DATA_DIR，默认 ./data）。为了让数据在重部署/休眠后不丢，
-// 在 render.yaml 中把 Render「持久磁盘」挂到 DATA_DIR（见 disks 配置）。零外部 API 调用。
+// 持久化：后端模式下数据存到本地文件（DATA_DIR，默认 ./data）。注意：仅付费实例挂了持久磁盘后，
+// 重部署/重启后数据才保留；免费实例的 /data 是临时的、部署即清空。默认前端走 localStorage（见 /config.js 的 enabled）。
+// 零外部 API 调用。
 
 
 // 服务端密钥（持久化到文件，重启后仍稳定 → token 可跨重启有效）
@@ -96,7 +97,7 @@ function saveBoard(state) {
     const payload = JSON.stringify(state, null, 2);
     atomicWrite(BOARD_FILE, payload);   // 本地缓存
     snapshotBackup();
-    // 数据已写入 DATA_DIR/board.json（挂载了持久磁盘则重部署/休眠后仍在）
+    // 数据已写入 DATA_DIR/board.json（仅当挂载了持久磁盘的付费实例才跨部署保留；免费实例部署即丢失）
     broadcast('state', { type: 'state', data: boardState });
     broadcast('presence', { type: 'presence', count: sseClients.size });
     return true;
@@ -168,8 +169,12 @@ const server = http.createServer(async (req, res) => {
   // --- 动态配置：后端部署时启用后端模式 ---
   if (pathname === '/config.js') {
     const base = process.env.BOARD_BASE || '';
+    // 默认关闭后端模式：Render 免费版不能挂持久磁盘，后端写入的 /data 是临时目录、每次重新部署被清空；
+    // 关闭后端后前端走 localStorage（浏览器存档），数据随浏览器保留、跨部署不丢。
+    // 若日后升级到付费实例并挂载持久磁盘，可设环境变量 BOARD_BACKEND=1 重新开启后端模式。
+    const backendEnabled = process.env.BOARD_BACKEND === '1';
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-    res.end(`window.BOARD_CONFIG = { enabled: true, base: ${JSON.stringify(base)}, storage: 'local', gmapsApiKey: ${JSON.stringify(process.env.GMAPS_API_KEY || '')} };`);
+    res.end(`window.BOARD_CONFIG = { enabled: ${backendEnabled}, base: ${JSON.stringify(base)}, storage: 'local', gmapsApiKey: ${JSON.stringify(process.env.GMAPS_API_KEY || '')} };`);
     return;
   }
 
@@ -259,7 +264,7 @@ async function boot() {
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ 旅行规划工作台后端已启动： http://localhost:${PORT}`);
     console.log(`   密码保护：单密码（环境变量 BOARD_PASSWORD，默认 "travel2026"）`);
-    console.log(`   永久存储：本地文件 ${BOARD_FILE}（建议把 Render 持久磁盘挂到 ${DATA_DIR}，重部署/休眠后数据不丢）`);
+    console.log(`   永久存储：本地文件 ${BOARD_FILE}（免费实例无持久磁盘，部署即清空；前端默认用浏览器 localStorage。付费实例挂磁盘+BOARD_BACKEND=1 才跨部署保留）`);
     console.log(`   多人实时：SSE /api/stream`);
   });
 }
