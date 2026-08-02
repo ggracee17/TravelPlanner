@@ -281,8 +281,9 @@ const server = http.createServer(async (req, res) => {
       });
       res.write('retry: 3000\n\n');
       sseClients.add(res);
-      // 连接即推送当前状态
-      if (boardState) res.write(`event: state\ndata: ${JSON.stringify({ type: 'state', data: boardState })}\n\n`);
+      // 注意：连接时【不再】主动推送整份 state。初始状态已由客户端的 fetchBoard 获取；
+      // 若此处再推一次，会和客户端的本地编辑（如刚新增的行程块）撞车，把尚未推送的新增覆盖掉。
+      // 仅推送 presence（在线人数），真正的 state 同步靠后续保存时的广播。
       res.write(`event: presence\ndata: ${JSON.stringify({ type: 'presence', count: sseClients.size })}\n\n`);
       const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) {} }, 25000);
       req.on('close', () => { clearInterval(ping); sseClients.delete(res); broadcast('presence', { type: 'presence', count: sseClients.size }); });

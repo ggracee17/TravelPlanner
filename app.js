@@ -6,6 +6,7 @@
    ===================================================================== */
 
 const STORAGE_KEY = 'travel_workspace_v1';
+const CACHE_KEY = 'travel_board_cache'; // 后端模式安全网：镜像服务端最新态到本地，防传输/SSE 竞态丢数据（与本地模式的 STORAGE_KEY 隔离，互不干扰迁移逻辑）
 
 const app = {
   // 全局状态
@@ -79,7 +80,15 @@ const app = {
         this.toast('已连接到家庭共享看板', 'success');
       })
       .catch(() => {
-        this.toast('无法连接服务端，请检查网络后刷新', 'error');
+        // 服务端连不上：若有本地缓存（上次成功镜像），先渲染出来，避免白屏/丢数据
+        try {
+          const raw = localStorage.getItem(CACHE_KEY);
+          if (raw) { this.state = this.normalizeState(JSON.parse(raw)); }
+        } catch (e) {}
+        if (typeof this.ensureChecklists === 'function') this.ensureChecklists();
+        this.renderSwitcher();
+        this.renderAll();
+        this.toast('无法连接服务端，已显示本地最近缓存（请检查网络后刷新）', 'error');
         this.updateStatus('连接失败');
       });
   },
@@ -129,6 +138,7 @@ const app = {
       if (j && j.data) {
         this.state = this.normalizeState(j.data);
         this._lastSig = JSON.stringify(this.state);
+        this._writeLocalCache();
       }
       return this.state;
     });
@@ -151,10 +161,29 @@ const app = {
 
   handleRemoteState(data) {
     if (!data || typeof data !== 'object') return;
+    const localSig = JSON.stringify(this.state);
     // 与本地一致（多半是自己刚保存的回声）→ 跳过，避免回环重渲染
-    if (JSON.stringify(data) === JSON.stringify(this.state)) return;
-    if (this.isModalOpen()) { this._pendingRemote = data; return; } // 编辑中暂存，关弹窗再应用
+    if (JSON.stringify(data) === localSig) return;
+    // 本地还有未推送的改动（弹窗编辑中 / 防抖保存尚未触发）→ 先暂存远端，不急着覆盖，
+    // 否则会把用户刚新增/修改的内容冲掉（典型症状：点了「➕ 添加」却看不到、刷新后也没了）。
+    const hasPendingLocal = this._saveTimer !== null || this._lastSig !== localSig;
+    if (this.isModalOpen() || hasPendingLocal) { this._pendingRemote = data; return; }
     this.applyRemote(data);
+  },
+
+  // 本地改动推送成功后，把暂存的远端状态应用进来（此时本地改动已落盘，覆盖是安全的）。
+  // 若暂存态与当前态相同则跳过，避免无谓重渲染。
+  _flushPendingRemote() {
+    if (!this._pendingRemote) return;
+    const d = this._pendingRemote;
+    this._pendingRemote = null;
+    if (JSON.stringify(d) !== JSON.stringify(this.state)) this.applyRemote(d);
+  },
+
+  // 后端模式安全网：把当前态镜像到本地缓存，防止「推送/接收竞态」导致数据在刷新后丢失。
+  _writeLocalCache() {
+    if (!this.backend.enabled) return;
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(this.state)); } catch (e) {}
   },
 
   applyRemote(data) {
@@ -219,8 +248,10 @@ const app = {
   },
 
   pushBoard() {
+    this._saveTimer = null; // 标记：本地改动已进入推送流程（防抖计时结束，避免 _saveTimer 常驻导致后续远端被误判为「有待推送改动」）
     if (!this.sessionToken) return Promise.resolve();
     const payload = JSON.stringify(this.state);
+    this._writeLocalCache(); // 安全网：推送前先镜像一份到本地
     return fetch(this.base() + '/api/board', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.sessionToken },
@@ -235,6 +266,7 @@ const app = {
           this._lastSig = payload;
           this._lastSaved = '已保存 ' + this.nowTime();
           this.updateStatus();
+          this._flushPendingRemote(); // 本地改动已落盘，现在可以把此前暂存的远端状态安全合并进来
         } else if (j === null) {
           // 已跳转登录
         } else {
@@ -279,8 +311,9 @@ const app = {
   saveState() {
     if (this.backend.enabled) {
       this.updateStatus('保存中…');
+      this._writeLocalCache(); // 安全网：本地镜像一份，防止传输/SSE 竞态导致的数据丢失
       if (this._saveTimer) clearTimeout(this._saveTimer);
-      this._saveTimer = setTimeout(() => this.pushBoard(), 500);
+      this._saveTimer = setTimeout(() => { this._saveTimer = null; this.pushBoard(); }, 500);
       return true;
     }
     try {
