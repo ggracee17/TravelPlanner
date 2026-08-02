@@ -198,6 +198,54 @@ function assert(cond, msg) {
     assert(day[1] === '12分钟|transit' && day[2] === '12分钟|transit', 'eco 关闭时移动仍正常重算（对照）');
   }
 
+  // ===== 测试 8：eco 模式下拖动不再弹「已暂停计算」提示（高频操作免打扰） =====
+  console.log('\n[测试8] 省 Credits 模式：拖动行程块不再重复提示「已暂停计算」');
+  const ECO_TIP = /省 Credits 模式已开启/;
+  {
+    const google = { maps: { DistanceMatrixService: FakeService, TravelMode: { TRANSIT: 'TRANSIT' }, UnitSystem: { METRIC: 'METRIC' } } };
+    const { app, ctx } = makeClient({ key: 'test', google });
+    app.state.ecoMode = true;
+    // 追加第二天，用于验证跨天移动（旧代码会对 fromDay + toDay 各弹一次提示）
+    app.state.d1.itinerary.push({
+      id: 'day2', date: '2026-01-02', weather: '',
+      spots: [{ id: 's4', name: 'D', type: 'spot', startTime: '09:00', durationH: 2, lat: 25.06, lng: 121.59, travelFromPrev: null }]
+    });
+
+    ctx.__toasts.length = 0;
+    app.modules.itinerary.moveSpotToTime('s2', 'day1', '10:00');
+    assert(!ctx.__toasts.some(t => ECO_TIP.test(t.msg)), '单日内拖动：无「已暂停计算」提示');
+    assert(ctx.__toasts.some(t => /已调整行程时间/.test(t.msg)), '仍保留「已调整行程时间」的正常操作反馈');
+
+    // 跨天移动过去会触发两次 computeTravel → 旧代码会连弹两条提示
+    ctx.__toasts.length = 0;
+    app.modules.itinerary.moveSpotToTime('s2', 'day2', '09:00');
+    assert(!ctx.__toasts.some(t => ECO_TIP.test(t.msg)), '跨天拖动：同样无提示（旧代码此处弹 2 条）');
+
+    // 连续拖动 5 次，累计不应产生任何 eco 提示
+    ctx.__toasts.length = 0;
+    for (let i = 0; i < 5; i++) app.modules.itinerary.moveSpotToTime('s2', 'day1', '1' + i + ':00');
+    const ecoTips = ctx.__toasts.filter(t => ECO_TIP.test(t.msg)).length;
+    assert(ecoTips === 0, `连续拖动 5 次累计 0 条 eco 提示（实际 ${ecoTips}）`);
+  }
+  {
+    // 用户显式点单天「🚗 交通时间」按钮时，仍应告知为何没反应
+    const google = { maps: { DistanceMatrixService: FakeService, TravelMode: { TRANSIT: 'TRANSIT' }, UnitSystem: { METRIC: 'METRIC' } } };
+    const { app, ctx } = makeClient({ key: 'test', google });
+    app.state.ecoMode = true;
+    ctx.__toasts.length = 0;
+    app.modules.itinerary.computeTravel('day1');          // 显式调用（非 silent）
+    assert(ctx.__toasts.some(t => ECO_TIP.test(t.msg)), '手动点「交通时间」仍提示已暂停（显式操作需要反馈）');
+  }
+  {
+    // eco 关闭时拖动照常重算，且不会出现 eco 提示
+    const google = { maps: { DistanceMatrixService: FakeService, TravelMode: { TRANSIT: 'TRANSIT' }, UnitSystem: { METRIC: 'METRIC' } } };
+    const { app, ctx } = makeClient({ key: 'test', google });
+    app.state.ecoMode = false;
+    ctx.__toasts.length = 0;
+    app.modules.itinerary.moveSpotToTime('s2', 'day1', '10:00');
+    assert(!ctx.__toasts.some(t => ECO_TIP.test(t.msg)), 'eco 关闭时拖动无 eco 提示（对照）');
+  }
+
   console.log('\n========== 结果: ' + passed + ' 通过, ' + failed + ' 失败 ==========');
   process.exit(failed === 0 ? 0 : 1);
 })();

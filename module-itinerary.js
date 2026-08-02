@@ -435,12 +435,14 @@ app.modules.itinerary = {
     found.startTime = newStart;
     toDay.spots.push(found);
     toDay.spots.sort((a, b) => itinTimeToNum(a.startTime) - itinTimeToNum(b.startTime));
-    // 移动后相邻段交通时间已失效：配置了 API Key 则自动重算，否则清除待手动重算
+    // 移动后相邻段交通时间已失效：配置了 API Key 且未开「省 Credits」则自动重算；
+    // 无 Key 则清除待手动重算；开了省 Credits 则保留原值静默跳过——
+    // 拖动是高频操作，此处不再弹「已暂停计算」提示（与 saveTrip 的处理保持一致）。
     const travelKey = (typeof window !== 'undefined' && window.BOARD_CONFIG && window.BOARD_CONFIG.gmapsApiKey) || '';
-    if (travelKey) {
+    if (travelKey && !app.state.ecoMode) {
       this.computeTravel(fromDay.id);
       if (toDay.id !== fromDay.id) this.computeTravel(toDay.id);
-    } else {
+    } else if (!travelKey) {
       this.clearTravelForDay(fromDay.id);
       this.clearTravelForDay(toDay.id);
     }
