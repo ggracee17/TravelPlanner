@@ -24,28 +24,33 @@ app.modules.expenses = {
     }
 
     const expenses = (app.state[d.id]?.expenses || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    const total = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const rate = parseFloat(d.audToTwd) || 21;   // 1 澳币 = ? 台币
+    const twdOf = (e) => (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
+    const total = expenses.reduce((s, e) => s + twdOf(e), 0);
     const budget = parseFloat(d.budget) || 0;
     const pct = budget > 0 ? (total / budget) * 100 : 0;
     const remaining = budget - total;
     const pCls = pct >= 100 ? 'danger' : pct >= 80 ? 'warning' : '';
     const pColor = pct >= 100 ? '#b91c1c' : pct >= 80 ? '#ea580c' : '#10b981';
 
-    // 按分类汇总
+    // 按分类汇总（以台币计）
     const byCat = {};
-    expenses.forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + (parseFloat(e.amount) || 0); });
+    expenses.forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + twdOf(e); });
     const catLabels = { 交通: '✈️', 住宿: '🏨', 门票: '🎫', 餐饮: '🍽️', 购物: '🛍️', 其他杂费: '💼' };
     const catColors = { 交通: '#0ea5e9', 住宿: '#10b981', 门票: '#8b5cf6', 餐饮: '#f59e0b', 购物: '#ec4899', 其他杂费: '#64748b' };
 
-    // 按日汇总
+    // 按日汇总（以台币计）
     const byDay = {};
-    expenses.forEach(e => { if (e.date) byDay[e.date] = (byDay[e.date] || 0) + (parseFloat(e.amount) || 0); });
+    expenses.forEach(e => { if (e.date) byDay[e.date] = (byDay[e.date] || 0) + twdOf(e); });
 
     sec.innerHTML = `
       <div class="card">
         <div class="card-title">
           <span>💰 板块4 · 旅行花销记账台账</span>
-          <div class="ml-auto flex gap-2">
+          <div class="ml-auto flex gap-2 items-center">
+            <label class="text-xs text-slate-500 whitespace-nowrap">💱 汇率 1 澳币 =</label>
+            <input id="expRate" type="number" min="0" step="0.1" value="${rate}" class="w-20 text-sm border border-slate-300 rounded px-2 py-1" onchange="app.modules.expenses.saveRate(this.value)" title="1 澳币折合多少台币，保存后所有澳币消费按此换算" />
+            <span class="text-xs text-slate-500">台币</span>
             <button class="btn btn-primary" onclick="app.modules.expenses.addExp()">➕ 记一笔</button>
             <button class="btn btn-success" onclick="app.modules.expenses.exportXlsx()">📥 导出 Excel</button>
           </div>
@@ -114,7 +119,7 @@ app.modules.expenses = {
                     <td class="text-tiny">${e.date || '-'}</td>
                     <td>${catLabels[e.category] || ''} ${e.category}</td>
                     <td>${e.detail || '-'}</td>
-                    <td class="font-semibold">¥${(parseFloat(e.amount) || 0).toFixed(2)}</td>
+                    <td class="font-semibold">${e.currency === 'AUD' ? 'A$' : '¥'}${(parseFloat(e.amount) || 0).toFixed(2)}${e.currency === 'AUD' ? ` <span class="text-tiny text-slate-500">· ≈ 台币 ¥${twdOf(e).toFixed(0)}</span>` : ''}</td>
                     <td class="text-tiny">${e.payment || '-'}</td>
                     <td>
                       <button class="btn btn-ghost btn-sm" onclick="app.modules.expenses.editExp('${e.id}')">✏️</button>
@@ -125,7 +130,7 @@ app.modules.expenses = {
               </tbody>
               <tfoot>
                 <tr style="background:#f1f5f9;font-weight:600">
-                  <td colspan="3" class="text-right">合计</td>
+                  <td colspan="3" class="text-right">合计（台币）</td>
                   <td>¥${total.toFixed(2)}</td>
                   <td colspan="2"></td>
                 </tr>
@@ -175,8 +180,16 @@ app.modules.expenses = {
           <input id="e_detail" value="${e.detail || ''}" placeholder="如：东京塔门票 / 京都到大阪新干线" />
         </div>
         <div class="form-field">
-          <label>单笔金额 (¥) <span class="req">*</span></label>
-          <input type="number" id="e_amount" value="${e.amount || ''}" min="0" step="0.01" />
+          <label>消费货币 <span class="req">*</span></label>
+          <select id="e_currency" onchange="app.modules.expenses.updatePreview()">
+            <option value="TWD" ${e.currency !== 'AUD' ? 'selected' : ''}>台币 (NT$)</option>
+            <option value="AUD" ${e.currency === 'AUD' ? 'selected' : ''}>澳币 (A$)</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>单笔金额 <span class="req">*</span></label>
+          <input type="number" id="e_amount" value="${e.amount || ''}" min="0" step="0.01" oninput="app.modules.expenses.updatePreview()" />
+          <div class="text-tiny text-slate-500 mt-1" id="e_twd_prev"></div>
         </div>
         <div class="form-field">
           <label>支付方式</label>
@@ -196,6 +209,19 @@ app.modules.expenses = {
       { text: '取消', class: 'btn btn-ghost', action: 'app.closeModal()' },
       { text: '保存', class: 'btn btn-primary', action: `app.modules.expenses.save('${e.id || ''}')` }
     ]);
+    setTimeout(() => this.updatePreview(), 0);
+  },
+
+  updatePreview() {
+    const amtEl = document.getElementById('e_amount');
+    const curEl = document.getElementById('e_currency');
+    const prev = document.getElementById('e_twd_prev');
+    if (!amtEl || !curEl || !prev) return;
+    const d = app.getActiveDestination();
+    const rate = parseFloat(d && d.audToTwd) || 21;
+    const amt = parseFloat(amtEl.value) || 0;
+    const twd = curEl.value === 'AUD' ? amt * rate : amt;
+    prev.textContent = amt > 0 ? `💱 ≈ 台币 ¥${twd.toFixed(0)}（汇率 1 澳币 = ${rate} 台币）` : '';
   },
 
   save(id) {
@@ -210,6 +236,7 @@ app.modules.expenses = {
 
     const data = {
       date, detail, amount,
+      currency: document.getElementById('e_currency').value,
       category: document.getElementById('e_cat').value,
       payment: document.getElementById('e_payment').value
     };
@@ -228,6 +255,16 @@ app.modules.expenses = {
     // 检查预算
     this.checkBudget();
     app.toast('消费已记录', 'success');
+  },
+
+  saveRate(val) {
+    const d = app.getActiveDestination();
+    if (!d) return;
+    const r = parseFloat(val);
+    if (!r || r <= 0) return app.toast('汇率需为正数', 'warning');
+    d.audToTwd = r;
+    app.saveState();
+    this.render();
   },
 
   removeExp(id) {
@@ -261,12 +298,15 @@ app.modules.expenses = {
     const expenses = app.state[d.id]?.expenses || [];
     if (expenses.length === 0) return app.toast('暂无消费记录', 'warning');
 
+    const rate = parseFloat(d.audToTwd) || 21;
+    const twdOf = (e) => (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
     const rows = expenses.map(e => ({
       日期: e.date, 分类: e.category, 详情: e.detail,
-      金额: e.amount, 支付方式: e.payment
+      货币: e.currency === 'AUD' ? '澳币' : '台币', 原金额: e.amount,
+      台币: Math.round(twdOf(e)), 支付方式: e.payment
     }));
-    const total = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-    rows.push({ 日期: '', 分类: '合计', 详情: '', 金额: total, 支付方式: '' });
+    const totalTwd = expenses.reduce((s, e) => s + twdOf(e), 0);
+    rows.push({ 日期: '', 分类: '合计', 详情: '', 货币: '', 原金额: '', 台币: Math.round(totalTwd), 支付方式: '' });
     if (typeof XLSX === 'undefined') { app.downloadCSV(`expense_${app.destName(d)}_${new Date().toISOString().slice(0,10)}.csv`, rows); return; }
 
     const wb = XLSX.utils.book_new();

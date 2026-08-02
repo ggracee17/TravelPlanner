@@ -22,6 +22,15 @@ const MAP_COLORS = {
   transport: '#06b6d4', shopping: '#f97316', other: '#64748b'
 };
 
+// 全部日期视图：按「第几天」分色（Day1 红 → Day2 橙 → … 循环）
+const DAY_COLORS = ['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#a855f7'];
+
+// 单日视图：按「地点类别」分色，复用 MAP_COLORS + 中文标签
+const CATEGORY_LABELS = {
+  restaurant: '餐厅', hotel: '酒店', spot: '景点',
+  transport: '交通', shopping: '购物', other: '其他'
+};
+
 app.modules.map = {
   _map: null,
   _loading: false,
@@ -67,6 +76,7 @@ app.modules.map = {
           下方列表里的<strong class="text-sky-700">地点名称已是可点击链接</strong>，点开即跳转到 Google Maps。
         </p>
         <div id="mapView" class="map-view"></div>
+        <div id="mapLegend" class="mt-2 mb-2 flex flex-wrap gap-3 text-xs"></div>
         <div id="mapList" class="mt-3"></div>
       </div>`;
     this.ensureMaps(() => this.showMap());
@@ -151,10 +161,12 @@ app.modules.map = {
   },
 
   async showMap() {
-    const items = this.collectSpots(this._sel());
+    const mode = this._sel();
+    const items = this.collectSpots(mode);
     if (!gmapsKey() || this._failed || typeof window === 'undefined' || !window.google || !window.google.maps) {
       const located = items.filter(it => it.spot.lat != null && it.spot.lng != null);
-      this.renderList(items, located);
+      this.renderList(items, located, mode);
+      this._renderLegend(items, mode);
       if (!gmapsKey()) this._noteNeedKey();
       else if (this._failed) this._noteMapFallback();
       return;
@@ -173,8 +185,34 @@ app.modules.map = {
     }
     if (needSave) app.saveState();
     const withCoord = items.filter(it => it.spot.lat != null && it.spot.lng != null);
-    this.renderList(items, withCoord);
-    this.drawMap(withCoord);
+    this.renderList(items, withCoord, mode);
+    this.drawMap(withCoord, mode);
+    this._renderLegend(items, mode);
+  },
+
+  /* 取色：全部日期按「第几天」，单日按「地点类别」 */
+  _colorForItem(it, mode) {
+    if (mode === '__all') return DAY_COLORS[it.dayIndex % DAY_COLORS.length];
+    return MAP_COLORS[it.spot.type] || MAP_COLORS.other;
+  },
+
+  _renderLegend(items, mode) {
+    const el = document.getElementById('mapLegend');
+    if (!el) return;
+    if (mode === '__all') {
+      // 按 dayIndex 去重，列出有行程的每天
+      const seen = new Set();
+      const days = [];
+      items.forEach(it => { if (!seen.has(it.dayIndex)) { seen.add(it.dayIndex); days.push(it); } });
+      el.innerHTML = days.map(it =>
+        `<span class="inline-flex items-center gap-1"><span style="width:12px;height:12px;border-radius:3px;background:${this._colorForItem(it, mode)};display:inline-block"></span>Day ${it.dayIndex + 1}</span>`
+      ).join('');
+    } else {
+      // 单日：列出地点类别
+      el.innerHTML = Object.keys(CATEGORY_LABELS).map(k =>
+        `<span class="inline-flex items-center gap-1"><span style="width:12px;height:12px;border-radius:3px;background:${MAP_COLORS[k]};display:inline-block"></span>${CATEGORY_LABELS[k]}</span>`
+      ).join('');
+    }
   },
 
   _pin(color) {
@@ -184,7 +222,7 @@ app.modules.map = {
     return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
   },
 
-  drawMap(withCoord) {
+  drawMap(withCoord, mode) {
     const view = document.getElementById('mapView');
     if (!view) return;
     if (this._map) { try { this._map = null; } catch (e) {} }
@@ -195,9 +233,10 @@ app.modules.map = {
     withCoord.forEach(it => {
       const s = it.spot;
       const pos = { lat: parseFloat(s.lat), lng: parseFloat(s.lng) };
-      const marker = new gm.Marker({ position: pos, map, title: s.name || '地点', icon: this._pin(MAP_COLORS[s.type] || MAP_COLORS.other) });
+      const marker = new gm.Marker({ position: pos, map, title: s.name || '地点', icon: this._pin(this._colorForItem(it, mode)) });
+      const dayPrefix = (mode === '__all' && it.dayIndex >= 0) ? ('Day ' + (it.dayIndex + 1) + ' ') : '';
       const content = `<div style="min-width:170px"><strong>${this._esc(s.name)}</strong>` +
-        `<br><span style="font-size:.7rem;color:#64748b">${it.dayIndex >= 0 ? ('Day ' + (it.dayIndex + 1) + ' ') : ''}${s.startTime || ''}</span>` +
+        `<br><span style="font-size:.7rem;color:#64748b">${dayPrefix}${s.startTime || ''}</span>` +
         (this._mapsUrl(s) ? `<br><a href="${this._mapsUrl(s)}" target="_blank" rel="noopener">🔗 在 Google Maps 打开</a>` : '') +
         `</div>`;
       const info = new gm.InfoWindow({ content });
@@ -208,7 +247,7 @@ app.modules.map = {
     this._map = map;
   },
 
-  renderList(items, withCoord) {
+  renderList(items, withCoord, mode) {
     const el = document.getElementById('mapList');
     if (!el) return;
     if (!items.length) {
@@ -219,15 +258,16 @@ app.modules.map = {
     el.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-2">` + items.map(it => {
       const s = it.spot;
       const located = okSet.has(s.id);
-      const color = MAP_COLORS[s.type] || MAP_COLORS.other;
+      const color = this._colorForItem(it, mode);
       const url = this._mapsUrl(s);
+      const dayTag = (mode === '__all' && it.dayIndex >= 0) ? `<span class="text-tiny text-slate-400">Day ${it.dayIndex + 1} · </span>` : '';
       const nameHtml = url
         ? `<a href="${url}" target="_blank" rel="noopener" class="text-sm font-semibold truncate text-sky-700 hover:underline">${this._esc(s.name || '未命名')}</a>`
         : `<span class="text-sm font-semibold truncate">${this._esc(s.name || '未命名')}</span>`;
       return `<div class="p-2 rounded border border-slate-200 flex items-start gap-2 ${located ? '' : 'opacity-60'}">
         <span style="width:10px;height:10px;border-radius:999px;background:${color};margin-top:5px;flex:none"></span>
         <div class="min-w-0">
-          <div class="truncate">${nameHtml} <span class="text-tiny text-slate-400">${s.startTime || ''}</span></div>
+          <div class="truncate">${dayTag}${nameHtml} <span class="text-tiny text-slate-400">${s.startTime || ''}</span></div>
           <div class="text-tiny text-slate-500 truncate">${located ? '' : '· <span class="text-amber-600">未定位（填写经纬度或粘贴地图链接）</span>'}</div>
         </div>
       </div>`;

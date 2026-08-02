@@ -889,7 +889,6 @@ app.modules.itinerary = {
       <div class="form-grid cols-2">
         <div class="form-field"><label>日期 <span class="req">*</span></label><input type="date" id="d_date" value="${day.date || ''}" /></div>
         <div class="form-field"><label>当日天气</label><input id="d_weather" value="${day.weather || ''}" placeholder="晴 22-30℃" /></div>
-        <div class="form-field col-span-full"><label>🗺️ 当日地图导航链接</label><input id="d_map" value="${day.mapLink || ''}" placeholder="https://..." /></div>
         <div class="form-field col-span-full"><label>📝 当日备注</label><textarea id="d_notes" rows="2">${day.notes || ''}</textarea></div>
       </div>
     `, [
@@ -909,7 +908,6 @@ app.modules.itinerary = {
     list[idx] = Object.assign({}, list[idx], {
       date,
       weather: document.getElementById('d_weather').value.trim(),
-      mapLink: document.getElementById('d_map').value.trim(),
       notes: document.getElementById('d_notes').value.trim()
     });
     app.saveState();

@@ -402,7 +402,8 @@ const app = {
   /* ====== 工具：花销总额 ====== */
   getExpensesTotal(destId) {
     const list = this.state[destId]?.expenses || [];
-    return list.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+    const rate = parseFloat(this.state[destId]?.audToTwd) || 21;
+    return list.reduce((s, e) => s + (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0)), 0);
   },
 
   /* ====== 工具：UUID ====== */
