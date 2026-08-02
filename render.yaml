@@ -5,20 +5,20 @@ services:
   - type: web
     name: travel-board
     runtime: node
-    plan: free            # 免费额度，足够家庭出行规划；免费版会休眠，且不能挂持久磁盘（见下方说明）
+    plan: starter        # 付费实例：支持挂载持久磁盘（/data 跨部署保留）。免费版不能挂磁盘、部署即清空。
     buildCommand: "npm install"
     startCommand: "node server.js"
     healthCheckPath: "/"  # 服务根路径返回 200，Render 据此判定已启动
     envVars:
       - key: BOARD_PASSWORD
         sync: false       # 部署后在 Render 控制台手动设置你的强密码（务必设置，否则用默认弱密码）
-      # 持久化（重要）：Render 免费版【不能】挂持久磁盘，后端写入的 /data 是临时目录、每次重新部署被清空。
-      # 因此默认关闭后端（见 BOARD_BACKEND），前端改走浏览器 localStorage，数据随浏览器保留、跨部署不丢、零外部 API。
-      # 若日后升级到付费实例：挂上 disks 持久磁盘到 /data + 设 BOARD_BACKEND=1，即可重新用后端文件存储（跨设备/多人实时）。
+      # 持久化（重要）：付费实例 + 已挂持久磁盘到 /data → 后端写入的看板跨部署/重启保留。
+      # BOARD_BACKEND=1 已开启后端文件存储（服务端 /data 永久存档 + SSE 多人实时），配合下方 disks 持久磁盘生效。
+      # （免费版不能挂磁盘、/data 部署即清空；本配置已升级为 starter 付费实例以支持磁盘。）
       - key: DATA_DIR
         value: /data
       - key: BOARD_BACKEND
-        sync: false       # 留空=关闭后端(浏览器 localStorage 模式)；设为 1 且实例为付费+已挂磁盘时，开启后端文件存储
+        value: "1"        # 开启后端文件存储（服务端 /data 永久存档 + SSE 多人实时）；需配合付费实例 + 已挂磁盘（见下方 disks）才跨部署保留
       # Google Maps API Key（密钥）：后端从环境变量读取，并注入前端 window.BOARD_CONFIG.gmapsApiKey
       # （见 server.js 的 /config.js 与 module-map.js 的 gmapsKey()）。请勿在源码里硬编码 Key。
       # 建议同步在 Google Cloud 对该 Key 设置「API 限制」(仅 Maps JS API + Geocoding API) 与
@@ -26,7 +26,7 @@ services:
       - key: GMAPS_API_KEY
         sync: false
       # PORT 由 Render 自动注入，server.js 已通过 process.env.PORT 读取，无需设置
-    # 持久磁盘：仅付费实例可用（免费版会被忽略）。仅在 BOARD_BACKEND=1 时使用。
+    # 持久磁盘：starter 付费实例可用。挂载到 /data 后，后端写入的 board.json 跨部署/重启保留。
     disks:
       - name: travel-data
         mountPath: /data

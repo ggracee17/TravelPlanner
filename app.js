@@ -71,6 +71,7 @@ const app = {
     this.fetchBoard()
       .then(() => {
         if (typeof this.ensureChecklists === 'function') this.ensureChecklists();
+        this.migrateLocalStorageToBackend();
         this.bindNavTabs();
         this.renderSwitcher();
         this.renderAll();
@@ -165,6 +166,36 @@ const app = {
     this.updateStatus();
   },
 
+  // 一次性迁移：从「浏览器本地模式」切换到「后端付费磁盘模式」时，
+  // 把此前在本地模式录入的数据推送到服务端，避免数据被丢弃。
+  // 触发条件：已登录后端、服务端看板为空、但浏览器 localStorage 有数据。
+  // 迁移完成后把本地副本归档（改名保留，便于救回），不再作为自动加载源。
+  migrateLocalStorageToBackend() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const data = this.normalizeState(JSON.parse(raw));
+      const localHas = Array.isArray(data.destinations) && data.destinations.length > 0;
+      const serverHas = Array.isArray(this.state.destinations) && this.state.destinations.length > 0;
+      if (localHas && !serverHas) {
+        // 服务端为空、本地是唯一真实数据 → 以本地覆盖服务端
+        this.state = data;
+        this._lastSig = '';
+        const done = this.pushBoard();
+        this.toast('已从浏览器本地备份迁移 ' + data.destinations.length + ' 个目的地到家庭共享看板', 'success');
+        Promise.resolve(done).then(() => {
+          try { localStorage.setItem(STORAGE_KEY + '_migrated', raw); localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+        });
+      } else if (localHas && serverHas) {
+        // 两端都有数据：以服务端为准（多人协作的权威态），本地仅做归档保留、不覆盖
+        try { localStorage.setItem(STORAGE_KEY + '_migrated', raw); localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+        this.toast('检测到浏览器本地也有旧数据，已归档为本地备份（未覆盖服务端），如需合并请手动导出', 'info');
+      }
+    } catch (e) {
+      console.warn('[迁移] 本地数据迁移失败（忽略）：', e.message);
+    }
+  },
+
   isModalOpen() {
     const r = document.getElementById('modalRoot');
     return !!(r && r.innerHTML && r.innerHTML.trim());
@@ -188,9 +219,9 @@ const app = {
   },
 
   pushBoard() {
-    if (!this.sessionToken) return;
+    if (!this.sessionToken) return Promise.resolve();
     const payload = JSON.stringify(this.state);
-    fetch(this.base() + '/api/board', {
+    return fetch(this.base() + '/api/board', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.sessionToken },
       body: payload
