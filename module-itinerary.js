@@ -277,7 +277,6 @@ app.modules.itinerary = {
 
   /* ===== 拖拽：改时间 / 跨日 ===== */
   _drag: null,
-  _pendingCoords: null, // 从地图链接解析出的坐标，保存时写入行程块/行程库
 
   onDragStart(e) {
     const el = e.target.closest && e.target.closest('[data-spot-id]');
@@ -449,12 +448,8 @@ app.modules.itinerary = {
       <div class="form-field col-span-full"><label>名称 <span class="req">*</span></label><input id="t_name" value="${s.name || ''}" placeholder="如：台北101" /></div>
       <div class="form-field"><label>分类</label><select id="t_type">${typeOpts}</select></div>
       <div class="form-field"><label>建议时长(小时)</label><input type="number" id="t_dur" min="0.5" step="0.5" value="${s.durationH || 1}" /></div>
-      <div class="form-field col-span-full"><label>地址</label><input id="t_addr" value="${s.address || ''}" /></div>
       <div class="form-field"><label>营业时间</label><input id="t_hours" value="${s.hours || ''}" placeholder="09:00-22:00" /></div>
-      <div class="form-field col-span-full"><label>🔗 Google Map 链接（仅用于获取地址）</label><div class="flex gap-2" style="align-items:stretch">
-        <input id="t_map" value="${s.mapUrl || ''}" placeholder="https://www.google.com/maps/place/.../@25.03,121.56,15z" class="flex-1" style="flex:2 1 0%" />
-        <button type="button" class="btn btn-ghost" style="flex:1 1 0%" onclick="app.modules.itinerary.fetchFromMapLink()">🔄 获取地址</button>
-      </div></div>
+      <div class="form-field col-span-full"><label>🔗 Google Map 链接</label><input id="t_map" value="${s.mapUrl || ''}" placeholder="https://www.google.com/maps/place/.../@25.03,121.56,15z" /></div>
       <div class="form-field col-span-full"><label>🖼️ 图片链接 (URL)</label><input id="t_img" value="${s.image || ''}" placeholder="https://.../photo.jpg" /></div>
       <div class="form-field col-span-full"><label>📝 备注</label><textarea id="t_note" rows="2">${s.note || ''}</textarea></div>
     `;
@@ -480,7 +475,6 @@ app.modules.itinerary = {
   },
 
   openTripForm(mode, a, b) {
-    this._pendingCoords = null;
     const cands = app.state.candidates || (app.state.candidates = []);
     let cand = null, day = null, s = null, isNew = false;
     let dayOptions = '';
@@ -572,14 +566,11 @@ app.modules.itinerary = {
       name,
       type: document.getElementById('t_type').value,
       durationH: Math.max(0.5, parseFloat(document.getElementById('t_dur').value) || 1),
-      address: (document.getElementById('t_addr').value || '').trim(),
       hours: (document.getElementById('t_hours').value || '').trim(),
       mapUrl: (document.getElementById('t_map').value || '').trim(),
       image: (document.getElementById('t_img').value || '').trim(),
       note: (document.getElementById('t_note').value || '').trim()
     };
-    const pc = this._pendingCoords;
-
     if (mode === 'spot') {
       const d = app.getActiveDestination();
       if (!d) return;
@@ -609,11 +600,6 @@ app.modules.itinerary = {
         if (cand) this._writeCommonToCand(cand, common);
       }
       Object.assign(spot, common, sched);
-      if (pc) {
-        spot.lat = pc.lat; spot.lng = pc.lng;
-        const cand = (app.state.candidates || []).find(c => c.id === spot.sourceId);
-        if (cand) { cand.lat = pc.lat; cand.lng = pc.lng; }
-      }
       day.spots.sort((x, y) => itinTimeToNum(x.startTime) - itinTimeToNum(y.startTime));
     } else {
       // 行程库编辑 / 新增：与行程表同一套字段，并可直接加入 / 移动到行程表的日期
@@ -627,7 +613,6 @@ app.modules.itinerary = {
         cands.push(cand);
       }
       this._writeCommonToCand(cand, common);
-      if (pc) { cand.lat = pc.lat; cand.lng = pc.lng; }
       this.propagateCandToSpots(cand, common); // 同步其它已加入的实例
 
       const d = app.getActiveDestination();
@@ -644,7 +629,6 @@ app.modules.itinerary = {
             reservation: document.getElementById('t_resv').value
           };
           const ns = Object.assign({ id: 'sp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), sourceId: cand.id }, common, sched);
-          if (pc) { ns.lat = pc.lat; ns.lng = pc.lng; }
           if (!day.spots) day.spots = [];
           day.spots.push(ns);
           day.spots.sort((x, y) => itinTimeToNum(x.startTime) - itinTimeToNum(y.startTime));
@@ -665,7 +649,6 @@ app.modules.itinerary = {
       name: common.name,
       type: ITIN_KEY_TO_CN[common.type] || '其他',
       durationH: common.durationH,
-      address: common.address,
       hours: common.hours,
       mapUrl: common.mapUrl,
       image: common.image,
@@ -677,7 +660,6 @@ app.modules.itinerary = {
     cand.name = common.name;
     cand.type = ITIN_KEY_TO_CN[common.type] || cand.type;
     cand.durationH = common.durationH;
-    cand.address = common.address;
     cand.hours = common.hours;
     cand.mapUrl = common.mapUrl;
     cand.image = common.image;
@@ -688,7 +670,7 @@ app.modules.itinerary = {
   propagateCandToSpots(cand, common) {
     const fields = {
       name: common.name, type: common.type, durationH: common.durationH,
-      address: common.address, hours: common.hours, mapUrl: common.mapUrl,
+      hours: common.hours, mapUrl: common.mapUrl,
       image: common.image, note: common.note
     };
     (app.state.destinations || []).forEach(dest => {
@@ -697,77 +679,7 @@ app.modules.itinerary = {
     });
   },
 
-  /* ===== Google Map 链接 → 自动获取地址 / 营业时间 ===== */
-  _setField(id, val) { const el = document.getElementById(id); if (el) el.value = val || ''; },
-
-  // 从 Google Maps 链接解析坐标或地点名（短链接 goo.gl/maps.app.goo.gl 浏览器端无法解析，需完整链接）
-  parseMapLink(url) {
-    if (!url) return null;
-    let m = url.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
-    if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
-    m = url.match(/[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
-    if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
-    m = url.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
-    if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
-    m = url.match(/\/place\/([^/@?]+)/);
-    if (m) return { name: decodeURIComponent(m[1]).replace(/\+/g, ' ').trim() };
-    return null;
-  },
-
-  // OpenStreetMap Nominatim 反向地理编码（免 Key；仅返回地址——地图链接只用于获取地址）
-  reverseGeocode(lat, lng) {
-    const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' + lat + '&lon=' + lng + '&accept-language=zh-CN';
-    return fetch(url, { headers: { 'Accept': 'application/json' } })
-      .then(r => r.json())
-      .then(d => (d && !d.error) ? (d.display_name || '') : '')
-      .catch(() => '');
-  },
-
-  async fetchFromMapLink() {
-    const url = ((document.getElementById('t_map') && document.getElementById('t_map').value) || '').trim();
-    if (!url) return app.toast('请先粘贴 Google Map 链接', 'warning');
-    let parsed = this.parseMapLink(url);
-    if (!parsed && /^https?:\/\//i.test(url)) {
-      // 浏览器端无法解析短链（CORS），交由后端展开为完整链接
-      try {
-        const r = await fetch(app.base() + '/api/resolve-map', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (app.sessionToken || '') },
-          body: JSON.stringify({ url })
-        }).then(x => x.json());
-        if (r && r.ok && r.url) { parsed = this.parseMapLink(r.url); if (parsed) app.toast('已展开短链', 'success'); }
-      } catch (e) { /* 展开失败则走下方提示 */ }
-    }
-    if (!parsed) return app.toast('无法解析该链接（短链展开失败，或链接不含 @坐标 / /place/名称；请粘贴完整链接）', 'warning');
-    app.toast('正在根据地图链接获取地址…', 'success');
-    try {
-      // 先确保 Google Maps（含 Geocoder）已加载，便于后续正向/反向地理编码
-      await new Promise(res => { (app.modules.map && app.modules.map.ensureMaps) ? app.modules.map.ensureMaps(res) : res(); });
-      let coords = null;
-      if (parsed.lat != null) {
-        coords = { lat: parsed.lat, lng: parsed.lng };
-      } else if (parsed.name) {
-        const g = (app.modules.map && app.modules.map.geocode) ? await app.modules.map.geocode(parsed.name) : null;
-        if (g) { coords = { lat: g.lat, lng: g.lng }; }
-        else { this._setField('t_addr', parsed.name); this._pendingCoords = null; app.toast('未解析到坐标，已填入名称（可手动修正）', 'success'); return; }
-      }
-      const addr = await this._reverseToAddress(coords);
-      if (addr) this._setField('t_addr', addr);
-      this._pendingCoords = coords;
-      app.toast(addr ? '已自动填入地址' : '未能获取地址（检查网络 / Google Key，或手动填写）', addr ? 'success' : 'warning');
-    } catch (e) {
-      app.toast('获取失败：' + (e && e.message ? e.message : e), 'error');
-    }
-  },
-
-  // 坐标 → 地址：优先 Google 反向地理编码（需 Key + Maps 已加载，自带 CORS 可靠），兜底 Nominatim（免 Key 但浏览器端可能受限）
-  async _reverseToAddress(coords) {
-    if (app.modules.map && app.modules.map.reverseGeocodeGoogle) {
-      const a = await app.modules.map.reverseGeocodeGoogle(coords.lat, coords.lng);
-      if (a) return a;
-    }
-    return this.reverseGeocode(coords.lat, coords.lng);
-  },
+  // 已移除「根据地图链接获取地址」功能：地址栏、获取按钮、短链解析与反向地理编码均已删除；地图链接字段保留。
 
   deleteTrip(dayId, spotId) {
     if (!confirm('确定删除这个行程块？')) return;
