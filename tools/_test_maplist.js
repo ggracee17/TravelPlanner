@@ -117,6 +117,7 @@ console.log('\n[测试C] __all 模式 Day 前缀仍正常');
 console.log('\n[测试D] 英文模式下也不出现链接说明');
 {
   const { app, listEl } = makeClient();
+  app.i18nEnabled = true;   // UI 上切换按钮已隐藏，这里显式开启以验证英文文案
   app.setLang('en');
   const map = app.modules.map;
   map.renderList([{ spot: spotLinked, dayIndex: 0 }, { spot: spotBare, dayIndex: 0 }], [], 'd1');

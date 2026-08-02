@@ -415,6 +415,9 @@ const app = {
 
   // 初始化界面语言：设置 <html lang> + 翻译静态元素 + 导航
   _initI18n() {
+    // 关闭双语时隐藏切换按钮（index.html 已默认带 hidden，这里兜底防止手工改回时漏掉）
+    const btn = document.getElementById('langToggle');
+    if (btn) btn.classList.toggle('hidden', !this.i18nEnabled);
     const html = document.querySelector('html');
     if (html) html.setAttribute('lang', this.i18nLang() === 'en' ? 'en' : 'zh-CN');
     this._applyI18n(document);
@@ -426,7 +429,12 @@ const app = {
   },
 
   /* ====== 国际化（中/EN） ====== */
+  // 语言切换入口总开关：false = 隐藏顶部 🌐 按钮并强制中文。
+  // i18n 基建（字典 / t() / data-i18n）全部保留，日后想开双语把这里改回 true 即可。
+  i18nEnabled: false,
+
   i18nLang() {
+    if (!this.i18nEnabled) return 'zh';
     try { return localStorage.getItem('travel_lang') || 'zh'; } catch (e) { return 'zh'; }
   },
 
@@ -444,6 +452,7 @@ const app = {
   },
 
   setLang(l) {
+    if (!this.i18nEnabled) return;
     try { localStorage.setItem('travel_lang', l); } catch (e) {}
     this._lang = l;
     const html = document.querySelector('html');

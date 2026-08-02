@@ -194,12 +194,22 @@ function extractToken(req, urlObj) {
 }
 
 // ---- 工具：读取请求体 ----
+// 读取请求体。
+// ⚠️ 必须先把所有 chunk 攒成 Buffer 再一次性 toString('utf8')。
+// 早期写法 `buf += chunk` 会对每个 chunk 单独做 UTF-8 解码，一旦某个中文字符的
+// 3 个字节被 TCP 分包切开（大 body 必然发生），两半各自解码成 U+FFFD 替换符，
+// 于是保存到 board.json 的中文就永久损坏（典型现象：「创可贴」变成「���可贴」）。
 function readBody(req) {
   return new Promise((resolve, reject) => {
-    let buf = '';
+    const chunks = [];
     let size = 0;
-    req.on('data', c => { size += c.length; if (size > 5 * 1024 * 1024) { reject(new Error('body too large')); req.destroy(); } buf += c; });
-    req.on('end', () => resolve(buf));
+    req.on('data', c => {
+      const b = Buffer.isBuffer(c) ? c : Buffer.from(c);
+      size += b.length;
+      if (size > 5 * 1024 * 1024) { reject(new Error('body too large')); req.destroy(); return; }
+      chunks.push(b);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
 }

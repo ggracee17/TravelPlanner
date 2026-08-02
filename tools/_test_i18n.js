@@ -26,9 +26,17 @@ function makeClient() {
       _store: s
     };
   })();
+  // 桩一个 #langToggle 按钮，用于验证 _initI18n 的显示/隐藏行为
+  const btn = { _cls: new Set(['btn']) };
+  btn.classList = {
+    toggle: (c, on) => { if (on) btn._cls.add(c); else btn._cls.delete(c); },
+    add: c => btn._cls.add(c),
+    contains: c => btn._cls.has(c)
+  };
+  const htmlEl = { _attr: {}, setAttribute: (k, v) => { htmlEl._attr[k] = v; }, getAttribute: k => htmlEl._attr[k] };
   const ctx = {
     window: {},
-    document: { getElementById: () => null, querySelector: () => null, querySelectorAll: () => [], addEventListener: () => {}, createElement: () => ({ style: {}, setAttribute() {}, appendChild() {} }), head: { appendChild() {} } },
+    document: { getElementById: id => (id === 'langToggle' ? btn : null), querySelector: sel => (sel === 'html' ? htmlEl : null), querySelectorAll: () => [], addEventListener: () => {}, createElement: () => ({ style: {}, setAttribute() {}, appendChild() {} }), head: { appendChild() {} } },
     localStorage: ls,
     fetch: () => Promise.resolve({ status: 200, json: () => Promise.resolve({ ok: true }) }),
     EventSource: function () {}, Blob: function () {}, URL: { createObjectURL: () => '', revokeObjectURL: () => {} },
@@ -39,7 +47,10 @@ function makeClient() {
   vm.runInContext(I18N_SRC, ctx);
   const app = ctx.__app;
   app.modules = {}; // 不注册任何模块，renderAll 安全空转
-  return { app, ctx, ls };
+  // 顶部 🌐 切换按钮目前在 UI 上隐藏（app.i18nEnabled=false，强制中文），
+  // 但 i18n 基建必须保持可用——这里显式打开开关来测试双语能力本身。
+  app.i18nEnabled = true;
+  return { app, ctx, ls, btn, htmlEl };
 }
 
 let passed = 0, failed = 0;
@@ -105,6 +116,33 @@ console.log('\n[测试D] _applyI18n 翻译 [data-i18n] 元素');
   app.setLang('zh');
   app._applyI18n(root);
   assert(els[0]._t === '🏠 工作台总览', '_applyI18n 切换回中文');
+}
+
+console.log('\n[测试E] i18nEnabled=false（当前线上状态）：强制中文并隐藏切换按钮');
+{
+  const { app, ls, btn, htmlEl } = makeClient();
+  app.i18nEnabled = false;
+  ls.setItem('travel_lang', 'en');            // 即使旧偏好残留是英文
+  assert(app.i18nLang() === 'zh', '关闭时 i18nLang 恒为 zh（不受旧 localStorage 残留影响）');
+  assert(app.t('nav.home') === '🏠 工作台总览', '关闭时 t() 返回中文');
+  app.setLang('en');
+  assert(app.i18nLang() === 'zh', 'setLang(en) 被忽略，仍是中文');
+  app.toggleLang();
+  assert(app.i18nLang() === 'zh', 'toggleLang 不生效');
+
+  app._initI18n();
+  assert(btn.classList.contains('hidden'), '_initI18n 给 #langToggle 加上 hidden');
+  assert(htmlEl.getAttribute('lang') === 'zh-CN', '<html lang> 设为 zh-CN');
+}
+
+console.log('\n[测试F] i18nEnabled=true 时按钮重新显示（日后要开双语只改一个开关）');
+{
+  const { app, btn } = makeClient();   // makeClient 里已置 true
+  btn.classList.add('hidden');
+  app._initI18n();
+  assert(!btn.classList.contains('hidden'), '_initI18n 移除 hidden，按钮恢复可见');
+  app.setLang('en');
+  assert(app.i18nLang() === 'en', '开启后 setLang 正常生效');
 }
 
 console.log('\n========== 结果: ' + passed + ' 通过, ' + failed + ' 失败 ==========');

@@ -20,9 +20,11 @@ function getJson(url, opts = {}) {
       timeout: 60000,
       headers: Object.assign({ 'Content-Type': 'application/json', 'User-Agent': 'deploy-check' }, opts.headers || {})
     }, res => {
-      let body = '';
-      res.on('data', c => (body += c));
+      // 同 server.js readBody：必须攒 Buffer 后统一解码，否则中文可能被分包切坏
+      const chunks = [];
+      res.on('data', c => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
       res.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
         let json; try { json = JSON.parse(body); } catch (e) { json = body; }
         resolve({ status: res.statusCode, json });
       });
