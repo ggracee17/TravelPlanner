@@ -726,8 +726,19 @@ app.modules.itinerary = {
   async fetchFromMapLink() {
     const url = ((document.getElementById('t_map') && document.getElementById('t_map').value) || '').trim();
     if (!url) return app.toast('请先粘贴 Google Map 链接', 'warning');
-    const parsed = this.parseMapLink(url);
-    if (!parsed) return app.toast('无法解析该链接（短链接 maps.app.goo.gl 暂不支持，请粘贴含 @坐标 或 /place/名称 的完整链接）', 'warning');
+    let parsed = this.parseMapLink(url);
+    if (!parsed && /^https?:\/\//i.test(url)) {
+      // 浏览器端无法解析短链（CORS），交由后端展开为完整链接
+      try {
+        const r = await fetch(app.base() + '/api/resolve-map', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (app.sessionToken || '') },
+          body: JSON.stringify({ url })
+        }).then(x => x.json());
+        if (r && r.ok && r.url) { parsed = this.parseMapLink(r.url); if (parsed) app.toast('已展开短链', 'success'); }
+      } catch (e) { /* 展开失败则走下方提示 */ }
+    }
+    if (!parsed) return app.toast('无法解析该链接（短链展开失败，或链接不含 @坐标 / /place/名称；请粘贴完整链接）', 'warning');
     app.toast('正在根据地图链接获取地址…', 'success');
     try {
       // 先确保 Google Maps（含 Geocoder）已加载，便于后续正向/反向地理编码

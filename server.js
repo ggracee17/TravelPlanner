@@ -226,6 +226,28 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 展开地图短链（maps.app.goo.gl / goo.gl）→ 返回最终完整 URL，供前端解析坐标。
+    // 浏览器端无法解析短链（CORS），故由后端（无 CORS 限制）展开；仅允许 Google 系域名防 SSRF。
+    if (pathname === '/api/resolve-map' && req.method === 'POST') {
+      if (!authorized(req, urlObj)) { res.writeHead(401); res.end(JSON.stringify({ error: '未授权' })); return; }
+      try {
+        const body = await readBody(req);
+        const { url } = JSON.parse(body || '{}');
+        if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('URL 不合法');
+        const host = new URL(url).hostname.toLowerCase();
+        if (!/(^|\.)goo\.gl$/.test(host) && !/(^|\.)google\.(com|apis\.com)$/.test(host)) {
+          throw new Error('仅支持 Google 地图短链（goo.gl / maps.app.goo.gl / google.com）');
+        }
+        const resp = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(10000) });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, url: resp.url }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: e.message }));
+      }
+      return;
+    }
+
     // SSE 实时流（需鉴权）
     if (pathname === '/api/stream' && req.method === 'GET') {
       if (!authorized(req, urlObj)) { res.writeHead(401); res.end('Unauthorized'); return; }
