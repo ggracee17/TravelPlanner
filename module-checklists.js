@@ -94,7 +94,7 @@ app.modules.checklists = {
         <p class="text-sm text-slate-600 mb-4">带勾选框的清单，出发前可逐项打勾。行李清单会根据当前目的地气候智能增减。</p>
 
         <div class="mb-2 p-3 bg-sky-50 border border-sky-200 rounded text-sm">
-          🌡️ <strong>当前目的地气候建议：</strong>${climate}
+          💡 <strong>当前目的地气候建议：</strong>${climate}
         </div>
       </div>
 
@@ -267,7 +267,7 @@ app.modules.checklists = {
 
     // 台湾：5-10月为炎热潮湿且台风季（9月仍是盛夏尾声，午后雷阵雨频繁、台风风险高）
     if (/台湾/.test(place) && month >= 5 && month <= 10) {
-      return `🌪️ 台湾湿热台风季（${place} ${month}月）——气温 21-31℃、湿度高、午后雷阵雨频繁、台风风险，建议：速干透气衣物、高倍防晒、驱蚊水、折叠雨伞/雨衣、防水文件袋、便携风扇`;
+      return `⚠️ 台湾湿热台风季（${place} ${month}月）——气温 21-31℃、湿度高、午后雷阵雨频繁、台风风险，建议：速干透气衣物、高倍防晒、驱蚊水、折叠雨伞/雨衣、防水文件袋、便携风扇`;
     }
 
     let suggestion = '';
@@ -278,7 +278,7 @@ app.modules.checklists = {
     } else if (month >= 6 && month <= 8) {
       suggestion = `☀️ 炎热夏季（${place} ${month}月）——气温 28-38℃，建议：短袖短裤、防晒服、太阳镜、补水喷雾、便携风扇`;
     } else {
-      suggestion = `🌤️ 温和气候（${place} ${month}月）——气温 15-25℃，建议：长袖+薄外套、薄毛衣、长裤、舒适步行鞋`;
+      suggestion = `⛅ 温和气候（${place} ${month}月）——气温 15-25℃，建议：长袖+薄外套、薄毛衣、长裤、舒适步行鞋`;
     }
     return suggestion;
   },
