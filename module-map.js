@@ -172,16 +172,19 @@ app.modules.map = {
       return;
     }
     // 地理编码缺失坐标（带缓存与失败去重，避免重复消耗配额）
+    // 省 Credits 模式：跳过 Geocoding API 调用，只显示已有坐标的点（坐标来自手动填写或行程链接解析）。
     let needSave = false;
-    for (const it of items) {
-      const s = it.spot;
-      if (s.lat != null && s.lng != null) continue;            // 已有坐标，跳过
-      const q = [s.name, s.address].filter(Boolean).join(' ').trim();
-      if (!q) { if (!s._geoFailed) { s._geoFailed = true; needSave = true; } continue; } // 无名称/地址，无法定位
-      if (s._geoFailed && s._geoFailQ === q) continue;          // 同一查询曾失败，本次跳过（省配额）
-      const g = await this.geocodeCached(q);
-      if (g) { s.lat = g.lat; s.lng = g.lng; s._geoFailed = false; s._geoFailQ = ''; needSave = true; }
-      else { s._geoFailed = true; s._geoFailQ = q; needSave = true; } // 失败标记，下次同查询不再调用
+    if (!app.state.ecoMode) {
+      for (const it of items) {
+        const s = it.spot;
+        if (s.lat != null && s.lng != null) continue;            // 已有坐标，跳过
+        const q = [s.name, s.address].filter(Boolean).join(' ').trim();
+        if (!q) { if (!s._geoFailed) { s._geoFailed = true; needSave = true; } continue; } // 无名称/地址，无法定位
+        if (s._geoFailed && s._geoFailQ === q) continue;          // 同一查询曾失败，本次跳过（省配额）
+        const g = await this.geocodeCached(q);
+        if (g) { s.lat = g.lat; s.lng = g.lng; s._geoFailed = false; s._geoFailQ = ''; needSave = true; }
+        else { s._geoFailed = true; s._geoFailQ = q; needSave = true; } // 失败标记，下次同查询不再调用
+      }
     }
     if (needSave) app.saveState();
     const withCoord = items.filter(it => it.spot.lat != null && it.spot.lng != null);
@@ -268,7 +271,7 @@ app.modules.map = {
         <span style="width:10px;height:10px;border-radius:999px;background:${color};margin-top:5px;flex:none"></span>
         <div class="min-w-0">
           <div class="truncate">${dayTag}${nameHtml} <span class="text-tiny text-slate-400">${s.startTime || ''}</span></div>
-          <div class="text-tiny text-slate-500 truncate">${located ? '' : '· <span class="text-amber-600">未定位（填写经纬度或粘贴地图链接）</span>'}</div>
+          <div class="text-tiny text-slate-500 truncate">${located ? '' : (s.mapUrl ? '· <span class="text-sky-600">🔗 已链接（点名称打开）</span>' : '· <span class="text-amber-600">未定位（填写经纬度或粘贴地图链接）</span>')}</div>
         </div>
       </div>`;
     }).join('') + `</div>`;

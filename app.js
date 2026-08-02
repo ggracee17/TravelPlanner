@@ -26,6 +26,7 @@ const app = {
   // 后端（多人协作 / 服务端永久存储）运行时状态
   backend: { enabled: false, base: '' },
   sessionToken: null,
+  sessionUser: null,
   _lastSig: '',
   _pendingRemote: null,
   _saveTimer: null,
@@ -39,6 +40,7 @@ const app = {
     if (this.backend.enabled) {
       // 后端模式：登录闸门 → 拉取服务端看板 → 实时同步
       this.sessionToken = this.localGet('travel_board_token');
+      this.sessionUser = this.localGet('travel_board_user');
       this.updateStatus();
       this.startBackend();
       return;
@@ -77,7 +79,7 @@ const app = {
         this.renderSwitcher();
         this.renderAll();
         this.updateStatus();
-        this.toast('已连接到家庭共享看板', 'success');
+        this.toast('已连接到旅行看板（账号：' + (this.sessionUser || '?') + '）', 'success');
       })
       .catch(() => {
         // 服务端连不上：若有本地缓存（上次成功镜像），先渲染出来，避免白屏/丢数据
@@ -94,38 +96,98 @@ const app = {
   },
 
   showLogin() {
-    this.openModal('🔒 输入访问密码', `
-      <p class="text-sm text-slate-600 mb-3">这是一份<strong>家庭共享</strong>旅行看板，需要密码才能打开。密码由家人共用，知道即可访问。</p>
+    this.openModal('🔒 登录旅行看板', `
+      <p class="text-sm text-slate-600 mb-3">每个账号拥有<strong>独立的旅行看板</strong>。家人朋友可各自注册账号、建自己的行程，互不串看。</p>
       <div class="form-field">
-        <label>访问密码</label>
-        <input id="loginPw" type="password" placeholder="请输入密码" onkeydown="if(event.key==='Enter')app.doUnlock(document.getElementById('loginPw').value)" />
+        <label>用户名</label>
+        <input id="loginUser" value="${this.sessionUser || ''}" placeholder="如 owner" onkeydown="if(event.key==='Enter')document.getElementById('loginPw').focus()" />
       </div>
+      <div class="form-field">
+        <label>密码</label>
+        <input id="loginPw" type="password" placeholder="请输入密码" onkeydown="if(event.key==='Enter')app.doUnlock(document.getElementById('loginUser').value, document.getElementById('loginPw').value)" />
+      </div>
+      <p class="text-tiny text-slate-500 mt-2">还没有账号？<a href="javascript:void(0)" onclick="app.showRegister()" class="text-sky-700 hover:underline">注册新账号</a></p>
     `, [
-      { text: '解锁', class: 'btn btn-primary', action: "app.doUnlock(document.getElementById('loginPw') ? document.getElementById('loginPw').value : '')" }
+      { text: '登录', class: 'btn btn-primary', action: "app.doUnlock(document.getElementById('loginUser').value, document.getElementById('loginPw').value)" }
     ]);
-    setTimeout(() => { const i = document.getElementById('loginPw'); if (i) i.focus(); }, 50);
+    setTimeout(() => { const i = document.getElementById('loginUser'); if (i) i.focus(); }, 50);
   },
 
-  doUnlock(pw) {
-    pw = (pw || '').trim();
+  doUnlock(username, pw) {
+    username = (username || '').trim(); pw = (pw || '').trim();
+    if (!username) return this.toast('请输入用户名', 'warning');
     if (!pw) return this.toast('请输入密码', 'warning');
     fetch(this.base() + '/api/unlock', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pw })
+      body: JSON.stringify({ username, password: pw })
     })
       .then(r => r.json().then(j => ({ status: r.status, j })))
       .then(({ status, j }) => {
-        if (status === 200 && j && j.token) {
-          this.sessionToken = j.token;
-          this.localSet('travel_board_token', j.token);
-          this.closeModal();
-          this.startBackend();
-        } else {
-          this.toast('密码错误', 'error');
-        }
+        if (status === 200 && j && j.token) this._applyAuth(username, j.token);
+        else this.toast((j && j.error) || '用户名或密码错误', 'error');
       })
       .catch(() => this.toast('无法连接服务端', 'error'));
+  },
+
+  showRegister() {
+    this.openModal('🆕 注册新账号', `
+      <p class="text-sm text-slate-600 mb-3">注册后将获得一个<strong>全新的独立旅行看板</strong>，与原账号数据互不干扰。</p>
+      <div class="form-field">
+        <label>用户名（3–32 位字母/数字/下划线）</label>
+        <input id="regUser" placeholder="如 michael" onkeydown="if(event.key==='Enter')document.getElementById('regPw').focus()" />
+      </div>
+      <div class="form-field">
+        <label>密码</label>
+        <input id="regPw" type="password" placeholder="设置密码" onkeydown="if(event.key==='Enter')document.getElementById('regPw2').focus()" />
+      </div>
+      <div class="form-field">
+        <label>确认密码</label>
+        <input id="regPw2" type="password" placeholder="再次输入密码" onkeydown="if(event.key==='Enter')app.doRegister(document.getElementById('regUser').value, document.getElementById('regPw').value, document.getElementById('regPw2').value)" />
+      </div>
+      <p class="text-tiny text-slate-500 mt-2">已有账号？<a href="javascript:void(0)" onclick="app.showLogin()" class="text-sky-700 hover:underline">返回登录</a></p>
+    `, [
+      { text: '注册并进入', class: 'btn btn-primary', action: "app.doRegister(document.getElementById('regUser').value, document.getElementById('regPw').value, document.getElementById('regPw2').value)" }
+    ]);
+    setTimeout(() => { const i = document.getElementById('regUser'); if (i) i.focus(); }, 50);
+  },
+
+  doRegister(username, pw, pw2) {
+    username = (username || '').trim(); pw = (pw || '').trim(); pw2 = (pw2 || '').trim();
+    if (!username) return this.toast('请输入用户名', 'warning');
+    if (pw.length < 1) return this.toast('密码不能为空', 'warning');
+    if (pw !== pw2) return this.toast('两次密码不一致', 'warning');
+    fetch(this.base() + '/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: pw })
+    })
+      .then(r => r.json().then(j => ({ status: r.status, j })))
+      .then(({ status, j }) => {
+        if (status === 200 && j && j.token) { this.closeModal(); this._applyAuth(username, j.token); }
+        else this.toast((j && j.error) || '注册失败', 'error');
+      })
+      .catch(() => this.toast('无法连接服务端', 'error'));
+  },
+
+  _applyAuth(username, token) {
+    this.sessionUser = username;
+    this.sessionToken = token;
+    this.localSet('travel_board_user', username);
+    this.localSet('travel_board_token', token);
+    this.closeModal();
+    this.startBackend();
+  },
+
+  logout() {
+    this.sessionUser = null;
+    this.sessionToken = null;
+    this.localSet('travel_board_user', '');
+    this.localSet('travel_board_token', '');
+    if (this._sse) { try { this._sse.close(); } catch (e) {} this._sse = null; }
+    this.updateStatus();
+    this.showLogin();
+    this.toast('已退出登录', 'info');
   },
 
   fetchBoard() {
@@ -215,7 +277,7 @@ const app = {
         this.state = data;
         this._lastSig = '';
         const done = this.pushBoard();
-        this.toast('已从浏览器本地备份迁移 ' + data.destinations.length + ' 个目的地到家庭共享看板', 'success');
+        this.toast('已从浏览器本地备份迁移 ' + data.destinations.length + ' 个目的地到你的旅行看板', 'success');
         Promise.resolve(done).then(() => {
           try { localStorage.setItem(STORAGE_KEY + '_migrated', raw); localStorage.removeItem(STORAGE_KEY); } catch (e) {}
         });
@@ -237,7 +299,7 @@ const app = {
   updateStatus(extra) {
     const el = document.getElementById('boardStatus');
     if (!el) return;
-    if (!this.backend.enabled) { el.classList.add('hidden'); el.textContent = ''; return; }
+    if (!this.backend.enabled) { el.classList.add('hidden'); el.textContent = ''; this._renderAccountBar(); return; }
     el.classList.remove('hidden');
     let s = '🔒 已解锁';
     const online = this._online > 0 ? this._online : (this._sse && this._sse.readyState === 1 ? 1 : 0);
@@ -245,6 +307,20 @@ const app = {
     if (extra) s += ' · ' + extra;
     else if (this._lastSaved) s += ' · ' + this._lastSaved;
     el.textContent = s;
+    this._renderAccountBar();
+  },
+
+  _renderAccountBar() {
+    const bar = document.getElementById('accountBar');
+    if (!bar) return;
+    if (!this.backend.enabled || !this.sessionUser) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
+    bar.classList.remove('hidden');
+    bar.innerHTML = `👤 <strong>${this._esc(this.sessionUser)}</strong>` +
+      `<button class="text-sky-700 hover:underline" onclick="app.logout()">退出</button>`;
+  },
+
+  _esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   },
 
   nowTime() {

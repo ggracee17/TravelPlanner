@@ -28,6 +28,28 @@ const ITIN_TYPES = {
 
 // 行程库(中文类型) ↔ 行程块(英文 key) 映射
 const ITIN_KEY_TO_CN = { restaurant: '餐厅', spot: '景点', hotel: '住宿', transport: '交通', shopping: '购物', other: '其他' };
+
+/* 从 Google Maps 链接里离线解析经纬度（零 credits，不调 API）。
+   支持的格式：
+     - .../@LAT,LNG,Z            （@ 后逗号分隔前两个浮点）
+     - ...!3dLAT!4dLNG           （编码坐标）
+     - ...?q=LAT,LNG             （q= 后逗号分隔）
+   解析不到（名称搜索 / maps.app.goo.gl 短链等）返回 null。 */
+function extractCoordsFromMapUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  let m;
+  // 1) @lat,lng,z
+  m = url.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  // 2) !3dLAT!4dLNG（顺序可能互换，各取其一）
+  const d3 = url.match(/!3d(-?\d+(?:\.\d+)?)/);
+  const d4 = url.match(/!4d(-?\d+(?:\.\d+)?)/);
+  if (d3 && d4) return { lat: parseFloat(d3[1]), lng: parseFloat(d4[1]) };
+  // 3) ?q=lat,lng 或 ?query=lat,lng（Maps URL API 两种写法）
+  m = url.match(/[?&](?:q|query)=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  return null;
+}
 const CN_TO_ITIN_KEY = { '餐厅': 'restaurant', '景点': 'spot', '住宿': 'hotel', '交通': 'transport', '购物': 'shopping', '其他': 'other' };
 
 function itinTimeToNum(t) {
@@ -84,6 +106,7 @@ app.modules.itinerary = {
               <option value="bicycling" ${travMode === 'bicycling' ? 'selected' : ''}>🚲 骑行</option>
             </select>
             <button class="btn btn-primary" onclick="app.modules.itinerary.computeTravelAll()" title="按顶部所选交通方式，重新计算所有天的相邻行程点交通时间">🚗 全部重算</button>
+            <button class="btn ${app.state.ecoMode ? 'btn-warning' : 'btn-ghost'}" onclick="app.modules.itinerary.toggleEco()" title="开启后暂停「交通距离计算」与「地图自动地理编码」两类 Google API 调用，省 credits">💡 省 Credits：${app.state.ecoMode ? '开' : '关'}</button>
             <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleZoom()">${app.state.itineraryZoom === 'compact' ? '🔍 宽松视图' : '🔍 紧凑视图'}</button>
             <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleExpand()">${expanded ? '🔼 收起空白' : '🔽 展开全部时间'}</button>
             <button class="btn btn-warning" onclick="app.modules.itinerary.autoGenDays()">⚡ 按日期自动生成空白日程</button>
@@ -438,6 +461,15 @@ app.modules.itinerary = {
     app.toast('交通方式已设为 ' + label + '，点每天的「🚗 交通时间」重新计算', 'info');
   },
 
+  /* 省 Credits 开关：开启后暂停「交通距离计算(Distance Matrix)」+「地图自动地理编码(Geocoding)」两类按次计费 API 调用。
+     状态存进看板(随 SSE 同步、持久化)。computeTravel / showMap 会读取此开关提前返回。 */
+  toggleEco() {
+    app.state.ecoMode = !app.state.ecoMode;
+    app.saveState();
+    app.renderAll();
+    app.toast(app.state.ecoMode ? '💡 省 Credits 模式已开启：暂停交通距离与地图地理编码 API 调用' : '省 Credits 模式已关闭：恢复交通距离与地图地理编码', app.state.ecoMode ? 'warning' : 'success');
+  },
+
   clearTravelForDay(dayId) {
     const d = app.getActiveDestination();
     if (!d) return;
@@ -453,6 +485,10 @@ app.modules.itinerary = {
   },
 
   computeTravel(dayId, silent) {
+    if (app.state.ecoMode) {
+      if (!silent) app.toast('💡 省 Credits 模式已开启，交通距离计算已暂停', 'info');
+      return Promise.resolve();
+    }
     const key = (typeof window !== 'undefined' && window.BOARD_CONFIG && window.BOARD_CONFIG.gmapsApiKey) || '';
     if (!key) {
       if (!silent) app.toast('需先配置 Google Maps API Key（环境变量 GMAPS_API_KEY）并启用 Distance Matrix API', 'error', 7000);
@@ -483,6 +519,10 @@ app.modules.itinerary = {
 
   /* 全部重算：按当前交通方式，依次计算所有天（每天 ≥2 个行程块）的交通时间。silent 时 suppressing 单天成功提示。 */
   async computeTravelAll() {
+    if (app.state.ecoMode) {
+      app.toast('💡 省 Credits 模式已开启，交通距离计算已暂停（点顶部「💡 省 Credits：开」关闭以恢复）', 'warning', 6000);
+      return;
+    }
     const key = (typeof window !== 'undefined' && window.BOARD_CONFIG && window.BOARD_CONFIG.gmapsApiKey) || '';
     if (!key) {
       app.toast('需先配置 Google Maps API Key（环境变量 GMAPS_API_KEY）并启用 Distance Matrix API', 'error', 7000);
@@ -780,10 +820,15 @@ app.modules.itinerary = {
         if (cand) this._writeCommonToCand(cand, common);
       }
       Object.assign(spot, common, sched);
+      // 从地图链接解析经纬度（零 credits）：链接带坐标则直接写入，地图上即能定位，不再显示「未定位」
+      if (spot.lat == null || spot.lng == null) {
+        const c = extractCoordsFromMapUrl(common.mapUrl);
+        if (c) { spot.lat = c.lat; spot.lng = c.lng; }
+      }
       day.spots.sort((x, y) => itinTimeToNum(x.startTime) - itinTimeToNum(y.startTime));
-      // 行程块内容/顺序变更：配置了 API Key 则自动重算，否则清除待手动重算
+      // 行程块内容/顺序变更：配置了 API Key 且未开「省 Credits」则自动重算，否则清除待手动重算
       const travelKey = (typeof window !== 'undefined' && window.BOARD_CONFIG && window.BOARD_CONFIG.gmapsApiKey) || '';
-      if (travelKey) this.computeTravel(a); else this.clearTravelForDay(a);
+      if (travelKey && !app.state.ecoMode) this.computeTravel(a); else if (!travelKey) this.clearTravelForDay(a);
     } else {
       this._clearTravelAllDays();   // 行程库改动可能同步到多天，统一清除待重算
       // 行程库编辑 / 新增：与行程表同一套字段，并可直接加入 / 移动到行程表的日期

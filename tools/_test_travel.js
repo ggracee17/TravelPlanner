@@ -177,6 +177,27 @@ function assert(cond, msg) {
     assert(d2[1] === '12分钟|transit', '第二天被重算');
   }
 
+  // ===== 测试 7：省 Credits 模式（ecoMode）暂停交通距离计算 =====
+  console.log('\n[测试7] 省 Credits 模式：ecoMode=true 时移动行程块不触发交通距离重算');
+  {
+    const google = { maps: { DistanceMatrixService: FakeService, TravelMode: { TRANSIT: 'TRANSIT' }, UnitSystem: { METRIC: 'METRIC' } } };
+    const { app } = makeClient({ key: 'test', google });
+    app.state.ecoMode = true;
+    app.state.d1.itinerary[0].spots.forEach(s => s.travelFromPrev = null);
+    app.modules.itinerary.moveSpotToTime('s2', 'day1', '10:00');
+    const day = dumpDay(app);
+    assert(day[0] === 'null' && day[1] === 'null' && day[2] === 'null', 'eco 模式下交通时间未被重算（保持 null，未消耗 API）');
+  }
+  {
+    const google = { maps: { DistanceMatrixService: FakeService, TravelMode: { TRANSIT: 'TRANSIT' }, UnitSystem: { METRIC: 'METRIC' } } };
+    const { app } = makeClient({ key: 'test', google });
+    app.state.ecoMode = false;
+    app.state.d1.itinerary[0].spots.forEach(s => s.travelFromPrev = null);
+    app.modules.itinerary.moveSpotToTime('s2', 'day1', '10:00');
+    const day = dumpDay(app);
+    assert(day[1] === '12分钟|transit' && day[2] === '12分钟|transit', 'eco 关闭时移动仍正常重算（对照）');
+  }
+
   console.log('\n========== 结果: ' + passed + ' 通过, ' + failed + ' 失败 ==========');
   process.exit(failed === 0 ? 0 : 1);
 })();
