@@ -253,7 +253,7 @@ const server = http.createServer(async (req, res) => {
     //   2) 检测到持久磁盘已挂载到 DATA_DIR（付费实例专属）。
     const backendEnabled = process.env.BOARD_BACKEND === '1' || ds.mounted;
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-    res.end(`window.BOARD_CONFIG = { enabled: ${backendEnabled}, base: ${JSON.stringify(base)}, storage: 'local', gmapsApiKey: ${JSON.stringify(process.env.GMAPS_API_KEY || '')} };`);
+    res.end(`window.BOARD_CONFIG = { enabled: ${backendEnabled}, base: ${JSON.stringify(base)}, storage: 'local', gmapsApiKey: ${JSON.stringify(process.env.GMAPS_API_KEY || '')}, gmapsMapId: ${JSON.stringify(process.env.GMAPS_MAP_ID || '')} };`);
     return;
   }
 

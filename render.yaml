@@ -25,6 +25,10 @@ services:
       # 「应用限制」(HTTP 引荐来源限制为本站域名)，避免被盗刷产生费用。
       - key: GMAPS_API_KEY
         sync: false
+      # 可选：Google Maps Map ID（在 Google Cloud 控制台「地图管理」创建）。设置后地图改用
+      # AdvancedMarkerElement（消除 google.maps.Marker 弃用告警）；不设置则回退经典 Marker。
+      - key: GMAPS_MAP_ID
+        sync: false
       # PORT 由 Render 自动注入，server.js 已通过 process.env.PORT 读取，无需设置
     # 持久磁盘：starter 付费实例可用。挂载到 /data 后，后端写入的 board.json 跨部署/重启保留。
     disks:

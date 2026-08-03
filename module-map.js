@@ -127,7 +127,7 @@ app.modules.map = {
       try { delete win[cbName]; } catch (e) {}
     };
     const s = document.createElement('script');
-    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(gmapsKey()) + '&callback=' + cbName;
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(gmapsKey()) + '&loading=async&callback=' + cbName;
     s.async = true;
     s.onerror = () => {
       this._loading = false; this._failed = true;
@@ -220,7 +220,7 @@ app.modules.map = {
     if (needSave) app.saveState();
     const withCoord = items.filter(it => it.spot.lat != null && it.spot.lng != null);
     this.renderList(items, withCoord, mode);
-    this.drawMap(withCoord, mode);
+    await this.drawMap(withCoord, mode);
     this._renderLegend(items, mode);
   },
 
@@ -256,29 +256,59 @@ app.modules.map = {
     return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
   },
 
-  drawMap(withCoord, mode) {
+  async drawMap(withCoord, mode) {
     const view = document.getElementById('mapView');
     if (!view) return;
-    if (this._map) { try { this._map = null; } catch (e) {} }
+    this._map = null;
     const gm = window.google.maps;
     const center = withCoord.length ? { lat: parseFloat(withCoord[0].spot.lat), lng: parseFloat(withCoord[0].spot.lng) } : { lat: 25.033, lng: 121.565 };
-    const map = new gm.Map(view, { center, zoom: 12, mapTypeControl: true, streetViewControl: true });
+    // 可选 Map ID（GMAPS_MAP_ID）：设置后地图改用矢量地图 + AdvancedMarkerElement，
+    // 彻底消除 google.maps.Marker 的弃用告警；未设置则不传 mapId，回退经典 Marker
+    // （仍可用、暂无停用计划，仅控制台有弃用提示）。
+    const gmapsMapId = (typeof window !== 'undefined' && window.BOARD_CONFIG && window.BOARD_CONFIG.gmapsMapId) || '';
+    let AdvMarker = null;
+    if (gmapsMapId && typeof gm.importLibrary === 'function') {
+      try { const lib = await gm.importLibrary('marker'); AdvMarker = lib.AdvancedMarkerElement || null; } catch (e) { AdvMarker = null; }
+    }
+    const useAdvanced = !!(gmapsMapId && AdvMarker);
+    const mapOpts = { center, zoom: 12, mapTypeControl: true, streetViewControl: true };
+    if (gmapsMapId) mapOpts.mapId = gmapsMapId;
+    const map = new gm.Map(view, mapOpts);
     const bounds = new gm.LatLngBounds();
     withCoord.forEach(it => {
       const s = it.spot;
       const pos = { lat: parseFloat(s.lat), lng: parseFloat(s.lng) };
-      const marker = new gm.Marker({ position: pos, map, title: s.name || '地点', icon: this._pin(this._colorForItem(it, mode)) });
+      const color = this._colorForItem(it, mode);
+      let marker;
+      if (useAdvanced) {
+        marker = new AdvMarker({ position: pos, map, title: s.name || '地点', content: this._pinEl(color) });
+      } else {
+        marker = new gm.Marker({ position: pos, map, title: s.name || '地点', icon: this._pin(color) });
+      }
       const dayPrefix = (mode === '__all' && it.dayIndex >= 0) ? ('Day ' + (it.dayIndex + 1) + ' ') : '';
       const content = `<div style="min-width:170px"><strong>${this._esc(s.name)}</strong>` +
         `<br><span style="font-size:.7rem;color:#64748b">${dayPrefix}${s.startTime || ''}</span>` +
         (this._mapsUrl(s) ? `<br><a href="${this._mapsUrl(s)}" target="_blank" rel="noopener">🔗 在 Google Maps 打开</a>` : '') +
         `</div>`;
       const info = new gm.InfoWindow({ content });
-      marker.addListener('click', () => info.open(map, marker));
+      if (useAdvanced) marker.addEventListener('click', () => info.open({ anchor: marker, map }));
+      else marker.addListener('click', () => info.open(map, marker));
       bounds.extend(pos);
     });
     if (withCoord.length > 1) { map.fitBounds(bounds); this._lastBounds = bounds; }
     this._map = map;
+  },
+
+  // AdvancedMarkerElement 用 HTML 元素作为图钉内容（经典 Marker 的 icon(data URI) 不适用）
+  _pinEl(color) {
+    const el = document.createElement('div');
+    el.style.width = '24px';
+    el.style.height = '36px';
+    el.style.cursor = 'pointer';
+    el.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="36" viewBox="0 0 24 36">' +
+      '<path fill="' + color + '" stroke="#ffffff" stroke-width="1.5" d="M12 0C5.4 0 0 5.4 0 12c0 8 12 24 12 24s12-16 12-24c0-6.6-5.4-12-12-12z"/>' +
+      '<circle cx="12" cy="12" r="5" fill="#ffffff"/></svg>';
+    return el;
   },
 
   renderList(items, withCoord, mode) {
