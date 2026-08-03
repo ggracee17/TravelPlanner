@@ -176,7 +176,7 @@ const app = {
     })
       .then(r => r.json().then(j => ({ status: r.status, j })))
       .then(({ status, j }) => {
-        if (status === 200 && j && j.needsVerification) this.showVerifyEmail(j.username || username, j.email || email);
+        if (status === 200 && j && j.needsVerification) this.showVerifyEmail(j.username || username, j.email || email, j.devCode, j.emailError);
         else if (status === 200 && j && j.token) { this.closeModal(); this._applyAuth(j.username || username, j.token); }
         else this.toast((j && j.error) || '注册失败', 'error');
       })
@@ -184,10 +184,19 @@ const app = {
   },
 
   // 邮箱验证弹窗：输入 6 位验证码激活账号
-  showVerifyEmail(username, email) {
+  // devCode: 开发/测试模式（未配置发信）由后端回传的验证码，直接展示以便本地走通流程
+  // emailError: 生产模式下发信失败标记，提示用户检查垃圾箱/发信配置
+  showVerifyEmail(username, email, devCode, emailError) {
     const masked = (email || '').replace(/^(.)(.*)(@.*)$/, (m, a, b, c) => a + (b ? b.replace(/./g, '·') : '') + c);
+    let notice = '';
+    if (devCode) {
+      notice = `<div class="notice notice-info mb-3">${this.t('auth.devCodeHint', { code: this._esc(devCode) })}</div>`;
+    } else if (emailError) {
+      notice = `<div class="notice notice-warn mb-3">${this.t('auth.emailSendError')}</div>`;
+    }
     this.openModal(this.t('auth.verifyTitle'), `
       <p class="text-sm text-slate-600 mb-3">${this.t('auth.verifyIntro', { email: masked })}</p>
+      ${notice}
       <div class="form-field">
         <label>${this.t('auth.emailCode')}</label>
         <input id="verifyCode" inputmode="numeric" maxlength="6" placeholder="6 位验证码" onkeydown="if(event.key==='Enter')app.doVerifyEmail('${this._esc(username)}', '${this._esc(email)}', document.getElementById('verifyCode').value)" />
@@ -223,8 +232,17 @@ const app = {
     })
       .then(r => r.json().then(j => ({ status: r.status, j })))
       .then(({ status, j }) => {
-        if (status === 200) this.toast(this.t('auth.codeSent'), 'success');
-        else this.toast((j && j.error) || '重发失败', 'error');
+        if (status === 200 && j && j.devCode) {
+          // 开发/测试模式：直接刷新弹窗展示新验证码
+          this.showVerifyEmail(username, email, j.devCode, j.emailError);
+          this.toast(this.t('auth.codeSent'), 'success');
+        } else if (status === 200 && j && j.emailError) {
+          this.toast(this.t('auth.emailSendError'), 'error');
+        } else if (status === 200) {
+          this.toast(this.t('auth.codeSent'), 'success');
+        } else {
+          this.toast((j && j.error) || '重发失败', 'error');
+        }
       })
       .catch(() => this.toast('无法连接服务端', 'error'));
   },

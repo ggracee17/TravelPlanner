@@ -370,17 +370,20 @@ const server = http.createServer(async (req, res) => {
         };
         emailToUser[normEmail] = u;
         saveAccounts();
+        let emailError = false;
         try {
           await sendEmail(normEmail, '验证你的旅行看板账号',
             '<p>你好，' + u + '！</p><p>你的邮箱验证码是 <b style="font-size:20px">' + code + '</b>，' +
             (EMAIL_CODE_TTL_MS / 60000) + ' 分钟内有效。</p><p>若非本人操作，忽略此邮件即可。</p>');
         } catch (e) {
+          emailError = true;
           console.warn('[email] 发送验证码失败（账号已建，仍可重试重发）：', e.message);
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           ok: true, needsVerification: true, username: u, email: normEmail,
-          devCode: EMAIL_MODE === 'dev' ? code : undefined
+          devCode: EMAIL_MODE === 'dev' ? code : undefined,
+          emailError: EMAIL_MODE === 'resend' ? emailError : undefined
         }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -468,15 +471,17 @@ const server = http.createServer(async (req, res) => {
         const now = Date.now();
         acc.verifyCode = code; acc.verifyExpires = now + EMAIL_CODE_TTL_MS; acc.verifySentAt = now;
         saveAccounts();
+        let emailError = false;
         try {
           await sendEmail(acc.email, '验证你的旅行看板账号',
             '<p>你的新邮箱验证码是 <b style="font-size:20px">' + code + '</b>，' +
             (EMAIL_CODE_TTL_MS / 60000) + ' 分钟内有效。</p>');
         } catch (e) {
+          emailError = true;
           console.warn('[email] 重发验证码失败：', e.message);
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, devCode: EMAIL_MODE === 'dev' ? code : undefined }));
+        res.end(JSON.stringify({ ok: true, devCode: EMAIL_MODE === 'dev' ? code : undefined, emailError: EMAIL_MODE === 'resend' ? emailError : undefined }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: '请求无效' }));
