@@ -141,7 +141,7 @@ const app = {
       <p class="text-sm text-slate-600 mb-3">${this.t('auth.registerIntro')}</p>
       <div class="form-field">
         <label>${this.t('auth.usernameHint')}</label>
-        <input id="regUser" placeholder="如 michael" onkeydown="if(event.key==='Enter')document.getElementById('regPw').focus()" />
+        <input id="regUser" placeholder="如 michael" onkeydown="if(event.key==='Enter')document.getElementById('regEmail').focus()" />
       </div>
       <div class="form-field">
         <label>${this.t('auth.email')}</label>
@@ -154,11 +154,11 @@ const app = {
       </div>
       <div class="form-field">
         <label>${this.t('auth.confirmPw')}</label>
-        <input id="regPw2" type="password" placeholder="${this.t('auth.confirmPw')}" onkeydown="if(event.key==='Enter')app.doRegister(document.getElementById('regUser').value, document.getElementById('regEmail').value, document.getElementById('regPw').value, document.getElementById('regPw2').value)" />
+        <input id="regPw2" type="password" placeholder="${this.t('auth.confirmPw')}" onkeydown="if(event.key==='Enter')app.doRegister(document.getElementById('regUser').value, document.getElementById('regPw').value, document.getElementById('regEmail').value, document.getElementById('regPw2').value)" />
       </div>
       <p class="text-tiny text-slate-500 mt-2">${this.t('auth.hasAccount')}<a href="javascript:void(0)" onclick="app.showLogin()" class="text-sky-700 hover:underline">${this.t('auth.backToLogin')}</a></p>
     `, [
-      { text: this.t('auth.registerSubmit'), class: 'btn btn-primary', action: "app.doRegister(document.getElementById('regUser').value, document.getElementById('regEmail').value, document.getElementById('regPw').value, document.getElementById('regPw2').value)" }
+      { text: this.t('auth.registerSubmit'), class: 'btn btn-primary', action: "app.doRegister(document.getElementById('regUser').value, document.getElementById('regPw').value, document.getElementById('regEmail').value, document.getElementById('regPw2').value)" }
     ]);
     setTimeout(() => { const i = document.getElementById('regUser'); if (i) i.focus(); }, 50);
   },
