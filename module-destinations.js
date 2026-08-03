@@ -8,7 +8,7 @@ app.modules.home = {
     const sec = document.querySelector('[data-section=home]');
     if (!sec) return;
     const dests = app.state.destinations;
-    const totalBudget = dests.reduce((s, d) => s + (parseFloat(d.budget) || 0), 0);
+    const totalBudget = dests.reduce((s, d) => s + app.getBudgetTotal(d.id), 0);
     const totalSpent = dests.reduce((s, d) => s + app.getExpensesTotal(d.id), 0);
     const totalDays = dests.reduce((s, d) => s + app.dateDiff(d.startDate, d.endDate), 0);
 
@@ -42,7 +42,7 @@ app.modules.home = {
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             ${dests.map(d => {
               const spent = app.getExpensesTotal(d.id);
-              const budget = parseFloat(d.budget) || 0;
+              const budget = app.getBudgetTotal(d.id);
               const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
               const pCls = pct >= 100 ? 'danger' : pct >= 80 ? 'warning' : '';
               return `
@@ -134,7 +134,7 @@ app.modules.destinations = {
                       <td class="text-tiny">${d.startDate || '?'}<br>~ ${d.endDate || '?'}</td>
                       <td>${app.dateDiff(d.startDate, d.endDate)}</td>
                       <td>${d.travelers || 0}</td>
-                      <td>¥${(parseFloat(d.budget) || 0).toFixed(0)}</td>
+                      <td>¥${app.getBudgetTotal(d.id).toFixed(0)}</td>
                       <td>¥${spent.toFixed(0)}</td>
                       <td class="text-tiny max-w-[200px]">${d.notes || '-'}</td>
                       <td class="text-tiny">

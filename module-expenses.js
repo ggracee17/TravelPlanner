@@ -27,7 +27,11 @@ app.modules.expenses = {
     const rate = parseFloat(d.audToTwd) || 21;   // 1 澳币 = ? 台币
     const twdOf = (e) => (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
     const total = expenses.reduce((s, e) => s + twdOf(e), 0);
-    const budget = parseFloat(d.budget) || 0;
+
+    // 逐项预算：每个 budget 项 { id, name, amount, currency }，汇总成台币
+    const budgets = (app.state[d.id]?.budgets || []).slice();
+    const bTwdOf = (b) => (b.currency === 'AUD' ? (parseFloat(b.amount) || 0) * rate : (parseFloat(b.amount) || 0));
+    const budget = app.getBudgetTotal(d.id);
     const pct = budget > 0 ? (total / budget) * 100 : 0;
     const remaining = budget - total;
     const pCls = pct >= 100 ? 'danger' : pct >= 80 ? 'warning' : '';
@@ -58,6 +62,48 @@ app.modules.expenses = {
         <p class="text-sm text-slate-600 mb-4">
           当前目的地：<strong class="text-sky-700">${app.destName(d)}</strong>　·　共 <strong>${expenses.length}</strong> 笔消费
         </p>
+
+        <!-- 预算明细（逐项添加，可选项货币） -->
+        <div class="mb-4 p-4 rounded-lg border border-indigo-200 bg-indigo-50/40">
+          <div class="flex items-center justify-between mb-3">
+            <div class="font-semibold text-slate-700 text-sm">💰 ${app.t('expense.budgetTitle')}</div>
+            <button class="btn btn-primary btn-sm" onclick="app.modules.expenses.addBudget()">${app.t('expense.budgetAdd')}</button>
+          </div>
+          ${budgets.length === 0 ? `
+            <div class="text-sm text-slate-600">
+              ${parseFloat(d.budget) > 0
+                ? `当前使用「整体总预算 ¥${(parseFloat(d.budget) || 0).toFixed(0)}」，可将其转为逐项预算：<button class="btn btn-ghost btn-sm ml-2" onclick="app.modules.expenses.migrateLegacyBudget()">${app.t('expense.budgetMigrate')}</button>`
+                : `📝 ${app.t('expense.budgetEmpty')} — ${app.t('expense.budgetNoItem')}`}
+            </div>
+          ` : `
+            <div class="overflow-x-auto">
+              <table class="data-table">
+                <thead><tr><th>预算项</th><th>货币</th><th>金额</th><th>折合台币</th><th>操作</th></tr></thead>
+                <tbody>
+                  ${budgets.map(b => `
+                    <tr>
+                      <td>${b.name || '-'}</td>
+                      <td>${b.currency === 'AUD' ? '澳币 (A$)' : '台币 (NT$)'}</td>
+                      <td class="font-semibold">${b.currency === 'AUD' ? 'A$' : '¥'}${(parseFloat(b.amount) || 0).toFixed(2)}</td>
+                      <td class="text-slate-600">¥${bTwdOf(b).toFixed(0)}</td>
+                      <td>
+                        <button class="btn btn-ghost btn-sm" onclick="app.modules.expenses.editBudget('${b.id}')">✏️</button>
+                        <button class="btn btn-danger btn-sm" onclick="app.modules.expenses.removeBudget('${b.id}')">🗑️</button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+                <tfoot>
+                  <tr style="background:#f1f5f9;font-weight:600">
+                    <td colspan="3" class="text-right">${app.t('expense.budgetTotal')}（台币）</td>
+                    <td>¥${budget.toFixed(2)}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          `}
+        </div>
 
         <!-- 预算总览 -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
@@ -277,11 +323,118 @@ app.modules.expenses = {
     }
   },
 
+  /* ====== 逐项预算 ====== */
+  addBudget() {
+    const d = app.getActiveDestination();
+    if (!d) return app.toast('请先选择目的地', 'warning');
+    this.openBudgetForm();
+  },
+
+  editBudget(id) {
+    const d = app.getActiveDestination();
+    if (!d) return;
+    const b = (app.state[d.id]?.budgets || []).find(x => x.id === id);
+    if (!b) return;
+    this.openBudgetForm(b);
+  },
+
+  openBudgetForm(existing = null) {
+    const b = existing || {};
+    const html = `
+      <div class="form-grid">
+        <div class="form-field col-span-full">
+          <label>预算项名称 <span class="req">*</span></label>
+          <input id="b_name" value="${b.name || ''}" placeholder="例如：机票预算 / 酒店预算 / 餐饮预算" />
+        </div>
+        <div class="form-field">
+          <label>货币 <span class="req">*</span></label>
+          <select id="b_currency" onchange="app.modules.expenses.updateBudgetPreview()">
+            <option value="TWD" ${b.currency !== 'AUD' ? 'selected' : ''}>台币 (NT$)</option>
+            <option value="AUD" ${b.currency === 'AUD' ? 'selected' : ''}>澳币 (A$)</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label>金额 <span class="req">*</span></label>
+          <input type="number" id="b_amount" value="${b.amount || ''}" min="0" step="0.01" oninput="app.modules.expenses.updateBudgetPreview()" />
+          <div class="text-tiny text-slate-500 mt-1" id="b_twd_prev"></div>
+        </div>
+      </div>
+    `;
+    app.openModal(existing ? '✏️ 编辑预算项' : '➕ 添加预算项', html, [
+      { text: '取消', class: 'btn btn-ghost', action: 'app.closeModal()' },
+      { text: '保存', class: 'btn btn-primary', action: `app.modules.expenses.saveBudget('${b.id || ''}')` }
+    ]);
+    setTimeout(() => this.updateBudgetPreview(), 0);
+  },
+
+  updateBudgetPreview() {
+    const amtEl = document.getElementById('b_amount');
+    const curEl = document.getElementById('b_currency');
+    const prev = document.getElementById('b_twd_prev');
+    if (!amtEl || !curEl || !prev) return;
+    const d = app.getActiveDestination();
+    const rate = parseFloat(d && d.audToTwd) || 21;
+    const amt = parseFloat(amtEl.value) || 0;
+    const twd = curEl.value === 'AUD' ? amt * rate : amt;
+    prev.textContent = amt > 0 ? `💱 ≈ 台币 ¥${twd.toFixed(0)}（汇率 1 澳币 = ${rate} 台币）` : '';
+  },
+
+  saveBudget(id) {
+    const d = app.getActiveDestination();
+    if (!d) return;
+    const name = document.getElementById('b_name').value.trim();
+    const amount = parseFloat(document.getElementById('b_amount').value);
+    if (!name) return app.toast('请填写预算项名称', 'warning');
+    if (!amount || amount < 0) return app.toast('请填写有效金额', 'warning');
+
+    const data = {
+      name,
+      amount,
+      currency: document.getElementById('b_currency').value
+    };
+
+    if (!app.state[d.id]) app.state[d.id] = {};
+    if (!app.state[d.id].budgets) app.state[d.id].budgets = [];
+    if (id) {
+      const idx = app.state[d.id].budgets.findIndex(x => x.id === id);
+      if (idx >= 0) app.state[d.id].budgets[idx] = { ...app.state[d.id].budgets[idx], ...data };
+    } else {
+      app.state[d.id].budgets.push({ id: 'bg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), ...data });
+    }
+    app.saveState();
+    app.closeModal();
+    this.render();
+    app.toast('预算项已保存', 'success');
+  },
+
+  removeBudget(id) {
+    const d = app.getActiveDestination();
+    if (!d || !confirm('确定删除该预算项？')) return;
+    if (app.state[d.id]?.budgets) {
+      app.state[d.id].budgets = app.state[d.id].budgets.filter(x => x.id !== id);
+      app.saveState();
+      this.render();
+    }
+  },
+
+  migrateLegacyBudget() {
+    const d = app.getActiveDestination();
+    if (!d) return;
+    const legacy = parseFloat(d.budget) || 0;
+    if (legacy <= 0) return;
+    if (!app.state[d.id]) app.state[d.id] = {};
+    if (!app.state[d.id].budgets) app.state[d.id].budgets = [];
+    app.state[d.id].budgets.push({ id: 'bg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), name: '整体预算', amount: legacy, currency: 'TWD' });
+    app.saveState();
+    this.render();
+    app.toast('已把原总预算转为一条预算项，可继续逐项添加', 'success');
+  },
+
   checkBudget() {
     const d = app.getActiveDestination();
     if (!d) return;
     const total = app.getExpensesTotal(d.id);
-    const budget = parseFloat(d.budget) || 0;
+    const budget = app.getBudgetTotal(d.id);
     if (budget > 0) {
       const pct = (total / budget) * 100;
       if (pct >= 100) {

@@ -629,7 +629,7 @@ const app = {
     const d = this.getActiveDestination();
     if (!d || !el) return;
     const expenseSum = this.getExpensesTotal(d.id);
-    const budget = parseFloat(d.budget) || 0;
+    const budget = this.getBudgetTotal(d.id);
     el.textContent = `· ${d.travelers || 0} 人 · 预算 ¥${budget.toFixed(0)} · 已花 ¥${expenseSum.toFixed(0)}`;
   },
 
@@ -643,6 +643,18 @@ const app = {
     const list = this.state[destId]?.expenses || [];
     const rate = parseFloat(this.state[destId]?.audToTwd) || 21;
     return list.reduce((s, e) => s + (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0)), 0);
+  },
+
+  /* ====== 工具：预算总额（逐项预算汇总成台币；无逐项时回落整体预算 d.budget） ====== */
+  getBudgetTotal(destId) {
+    const d = this.state.destinations.find(x => x.id === destId);
+    if (!d) return 0;
+    const items = this.state[destId]?.budgets || [];
+    if (items.length > 0) {
+      const rate = parseFloat(d.audToTwd) || 21;
+      return items.reduce((s, b) => s + (b.currency === 'AUD' ? (parseFloat(b.amount) || 0) * rate : (parseFloat(b.amount) || 0)), 0);
+    }
+    return parseFloat(d.budget) || 0;
   },
 
   /* ====== 工具：UUID ====== */
@@ -693,7 +705,7 @@ const app = {
       const destRows = this.state.destinations.map(d => ({
         '目的地': app.destName(d), '起止日期': `${d.startDate || ''} ~ ${d.endDate || ''}`,
         '出行天数': app.dateDiff(d.startDate, d.endDate), '同行人数': d.travelers,
-        '总预算(¥)': d.budget, '备注': d.notes
+        '总预算(¥)': app.getBudgetTotal(d.id), '备注': d.notes
       }));
       if (destRows.length) sheets.push({ name: '目的地档案', rows: destRows });
 
