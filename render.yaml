@@ -25,14 +25,6 @@ services:
       # 「应用限制」(HTTP 引荐来源限制为本站域名)，避免被盗刷产生费用。
       - key: GMAPS_API_KEY
         sync: false
-      # 邮件（注册邮箱验证）：用 Resend 发送验证码。去 https://resend.com 申请 API Key 与已验证发件域名。
-      # 不设置 RESEND_API_KEY 时自动进入 dev 模式：只把验证码打印到服务端日志、并在注册接口返回 devCode（方便本地/测试），不真发邮件。
-      - key: RESEND_API_KEY
-        sync: false
-      - key: EMAIL_FROM
-        sync: false     # 改成你 Resend 已验证的发件域名（如 noreply@yourdomain.com）；留空默认 onboarding@resend.dev
-      - key: EMAIL_MODE
-        sync: false     # 留空即可（有 RESEND_API_KEY 自动走 resend，无则 dev）；也可显式填 resend / dev
       # PORT 由 Render 自动注入，server.js 已通过 process.env.PORT 读取，无需设置
     # 持久磁盘：starter 付费实例可用。挂载到 /data 后，后端写入的 board.json 跨部署/重启保留。
     disks:

@@ -79,16 +79,9 @@ function deepEq(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
   await wait(1500);
 
   try {
-    // 新注册需邮箱验证才能拿到 token；dev 模式（无 RESEND_API_KEY）由响应回传 devCode
-    const reg = await req('POST', '/api/register', { body: JSON.stringify({ username: 'enctest', password: 'pw', email: 'enctest@example.com' }) });
-    assert(reg.status === 200 && reg.json && reg.json.needsVerification, '注册返回 needsVerification');
-    const devCode = reg.json && reg.json.devCode;
-    let token = reg.json && reg.json.token;
-    if (!token && reg.json && reg.json.needsVerification && devCode) {
-      const vres = await req('POST', '/api/verify-email', { body: JSON.stringify({ username: 'enctest', code: devCode }) });
-      token = vres.json && vres.json.token;
-    }
-    assert(!!token, '注册测试账号成功（含邮箱验证拿到 token）');
+    const reg = await req('POST', '/api/register', { body: JSON.stringify({ username: 'enctest', password: 'pw' }) });
+    assert(reg.status === 200 && reg.json && reg.json.token, '注册测试账号成功');
+    const token = reg.json && reg.json.token;
 
     console.log('\n[测试A] 中文字符被 TCP 分包切开时不损坏');
     {

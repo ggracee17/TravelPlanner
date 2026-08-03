@@ -9,7 +9,6 @@
    ============================================================ */
 
 const http = require('http');
-const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -47,15 +46,7 @@ if (!process.env.BOARD_PASSWORD) {
 
 // 持久化：后端模式下数据存到本地文件（DATA_DIR，默认 ./data）。注意：仅付费实例挂了持久磁盘后，
 // 重部署/重启后数据才保留；免费实例的 /data 是临时的、部署即清空。
-
-// 邮件（注册邮箱验证）：用 Node 内置 https 调 Resend 发送验证码。无 key 时走 dev 模式（仅打印验证码到日志，
-// 并在注册接口返回 devCode 方便本地/测试）。生产请在 Render 配置 RESEND_API_KEY + EMAIL_FROM + EMAIL_MODE=resend。
-const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const EMAIL_FROM = process.env.EMAIL_FROM || 'onboarding@resend.dev';
-const EMAIL_MODE = process.env.EMAIL_MODE || (RESEND_API_KEY ? 'resend' : 'dev');
-const RESEND_API_BASE = process.env.RESEND_API_BASE || 'https://api.resend.com';
-const EMAIL_CODE_TTL_MS = Number(process.env.EMAIL_CODE_TTL_MS) || 15 * 60 * 1000;
-const EMAIL_RESEND_COOLDOWN_MS = 60 * 1000;
+// 零外部 API 调用。
 
 // 服务端密钥（持久化到文件，重启后仍稳定 → token 可跨重启有效）
 function loadOrCreateSecret() {
@@ -72,61 +63,13 @@ const SALT = crypto.createHash('sha256').update(SERVER_SECRET).digest();
 function pwHash(pw) { return crypto.scryptSync(String(pw), SALT, 32).toString('hex'); }
 
 // ===== 账号 & 每用户看板 =====
-// accounts: { [username]: { pwHash, boardFile, createdAt, admin, email,
-//                          verified(默认 true=已验证；显式 false=待验证),
-//                          verifyCode, verifyExpires, verifySentAt } }
+// accounts: { [username]: { pwHash, boardFile, createdAt } }
 let accounts = {};
-let emailToUser = {};   // 小写邮箱 -> 用户名 反查表（内存，启动时从 accounts 重建）
 function loadAccounts() {
   try { if (fs.existsSync(ACCOUNTS_FILE)) accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8')) || {}; }
   catch (e) { accounts = {}; }
-  rebuildEmailIndex();
 }
-function rebuildEmailIndex() {
-  emailToUser = {};
-  for (const [u, a] of Object.entries(accounts)) {
-    if (a && a.email) emailToUser[String(a.email).toLowerCase()] = u;
-  }
-}
-// 向后兼容：旧账号 verified 为 undefined → 视为已验证；仅显式 false 才拦截。
-function isVerified(acc) { return !!(acc && acc.verified !== false); }
 function saveAccounts() { atomicWrite(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2)); }
-
-// 发送邮件（注册验证码等）。dev 模式/无 key 时不真发，仅打印到日志，便于本地与测试。
-function sendEmail(to, subject, html) {
-  return new Promise((resolve, reject) => {
-    if (EMAIL_MODE !== 'resend' || !RESEND_API_KEY) {
-      console.log('[email][dev] to=' + to + ' subject=' + subject);
-      return resolve({ dev: true });
-    }
-    const payload = JSON.stringify({ from: EMAIL_FROM, to: [to], subject, html });
-    let u;
-    try { u = new URL(RESEND_API_BASE + '/emails'); } catch (e) { return reject(e); }
-    const transport = u.protocol === 'http:' ? http : https;
-    const req = transport.request({
-      hostname: u.hostname,
-      port: u.port || 443,
-      path: u.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + RESEND_API_KEY,
-        'Content-Length': Buffer.byteLength(payload)
-      }
-    }, res => {
-      const cs = [];
-      res.on('data', c => cs.push(c));
-      res.on('end', () => {
-        const ok = res.statusCode >= 200 && res.statusCode < 300;
-        if (ok) resolve({});
-        else reject(new Error('Resend ' + res.statusCode + ' ' + Buffer.concat(cs).toString('utf8')));
-      });
-    });
-    req.on('error', reject);
-    req.write(payload);
-    req.end();
-  });
-}
 
 // 内存看板缓存 + 每用户写链（串行化，避免并发交错）
 const boards = new Map();          // username -> { state, sig }
@@ -310,7 +253,7 @@ const server = http.createServer(async (req, res) => {
     //   2) 检测到持久磁盘已挂载到 DATA_DIR（付费实例专属）。
     const backendEnabled = process.env.BOARD_BACKEND === '1' || ds.mounted;
     res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-    res.end(`window.BOARD_CONFIG = { enabled: ${backendEnabled}, base: ${JSON.stringify(base)}, storage: 'local', gmapsApiKey: ${JSON.stringify(process.env.GMAPS_API_KEY || '')}, emailMode: ${JSON.stringify(EMAIL_MODE === 'resend')} };`);
+    res.end(`window.BOARD_CONFIG = { enabled: ${backendEnabled}, base: ${JSON.stringify(base)}, storage: 'local', gmapsApiKey: ${JSON.stringify(process.env.GMAPS_API_KEY || '')} };`);
     return;
   }
 
@@ -326,11 +269,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // 注册新账号（开放注册）：建独立账号 + 空看板；需邮箱 + 验证码激活，返回 needsVerification（不签发 token）
+    // 注册新账号（开放注册）：建独立账号 + 空看板，返回 token
     if (pathname === '/api/register' && req.method === 'POST') {
       try {
         const body = await readBody(req);
-        const { username, password, email } = JSON.parse(body || '{}');
+        const { username, password } = JSON.parse(body || '{}');
         const u = safeUser(username);
         if (!u || u.length < 3) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -342,49 +285,19 @@ const server = http.createServer(async (req, res) => {
           res.end(JSON.stringify({ ok: false, error: '密码不能为空' }));
           return;
         }
-        const normEmail = String(email == null ? '' : email).trim().toLowerCase();
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normEmail)) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: false, error: '邮箱格式不正确' }));
-          return;
-        }
         if (accounts[u]) {
           res.writeHead(409, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: false, error: '该用户名已存在' }));
           return;
         }
-        if (emailToUser[normEmail]) {
-          res.writeHead(409, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: false, error: '该邮箱已被注册' }));
-          return;
-        }
         fs.mkdirSync(BOARDS_DIR, { recursive: true });
         const boardFile = path.join(BOARDS_DIR, u + '.json');
-        atomicWrite(boardFile, JSON.stringify(defaultState(), null, 2));
-        const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
-        const now = Date.now();
-        accounts[u] = {
-          pwHash: pwHash(password), boardFile, createdAt: new Date().toISOString(),
-          email: normEmail, verified: false,
-          verifyCode: code, verifyExpires: now + EMAIL_CODE_TTL_MS
-        };
-        emailToUser[normEmail] = u;
+        const newState = defaultState();
+        atomicWrite(boardFile, JSON.stringify(newState, null, 2));
+        accounts[u] = { pwHash: pwHash(password), boardFile, createdAt: new Date().toISOString() };
         saveAccounts();
-        let emailError = false;
-        try {
-          await sendEmail(normEmail, '验证你的旅行看板账号',
-            '<p>你好，' + u + '！</p><p>你的邮箱验证码是 <b style="font-size:20px">' + code + '</b>，' +
-            (EMAIL_CODE_TTL_MS / 60000) + ' 分钟内有效。</p><p>若非本人操作，忽略此邮件即可。</p>');
-        } catch (e) {
-          emailError = true;
-          console.warn('[email] 发送验证码失败（账号已建，仍可重试重发）：', e.message);
-        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          ok: true, needsVerification: true, username: u, email: normEmail,
-          devCode: EMAIL_MODE === 'dev' ? code : undefined,
-          emailError: EMAIL_MODE === 'resend' ? emailError : undefined
-        }));
+        res.end(JSON.stringify({ ok: true, token: tokenFor(u, accounts[u].pwHash) }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: '请求无效' }));
@@ -392,96 +305,20 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // 解锁/登录：校验 用户名/邮箱 + 密码 → 返回 token（映射到该用户独立看板）
+    // 解锁/登录：校验 用户名 + 密码 → 返回 token（映射到该用户独立看板）
     if (pathname === '/api/unlock' && req.method === 'POST') {
       try {
         const body = await readBody(req);
-        const { username, email, password } = JSON.parse(body || '{}');
-        const uname = email
-          ? emailToUser[String(email).trim().toLowerCase()]
-          : safeUser(username);
-        const acc = uname ? accounts[uname] : null;
-        if (!acc || pwHash(password) !== acc.pwHash) {
+        const { username, password } = JSON.parse(body || '{}');
+        const u = safeUser(username);
+        const acc = accounts[u];
+        if (acc && pwHash(password) === acc.pwHash) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, token: tokenFor(u, acc.pwHash) }));
+        } else {
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ ok: false, error: '用户名或密码错误' }));
-          return;
         }
-        if (!isVerified(acc)) {
-          res.writeHead(403, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: false, error: '请先验证邮箱', needsVerification: true }));
-          return;
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, token: tokenFor(uname, acc.pwHash), username: uname }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, error: '请求无效' }));
-      }
-      return;
-    }
-
-    // 验证邮箱：用 用户名 或 邮箱 + 6 位验证码，校验通过将账号置为已验证并签发 token
-    if (pathname === '/api/verify-email' && req.method === 'POST') {
-      try {
-        const body = await readBody(req);
-        const { username, email, code } = JSON.parse(body || '{}');
-        const uname = (email ? emailToUser[String(email).trim().toLowerCase()] : null) || (username ? safeUser(username) : null);
-        const acc = uname ? accounts[uname] : null;
-        if (!acc) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: '账号不存在' })); return; }
-        if (isVerified(acc)) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, token: tokenFor(uname, acc.pwHash), username: uname }));
-          return;
-        }
-        const c = String(code == null ? '' : code);
-        const expired = !acc.verifyCode || !acc.verifyExpires || acc.verifyExpires < Date.now();
-        const ok = !expired && c.length === 6 && acc.verifyCode.length === 6 &&
-          crypto.timingSafeEqual(Buffer.from(c), Buffer.from(acc.verifyCode));
-        if (!ok) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: false, error: expired ? '验证码已过期，请重新发送' : '验证码错误' }));
-          return;
-        }
-        acc.verified = true; acc.verifyCode = ''; acc.verifyExpires = 0;
-        saveAccounts();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, token: tokenFor(uname, acc.pwHash), username: uname }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, error: '请求无效' }));
-      }
-      return;
-    }
-
-    // 重新发送验证码（限流 60s）
-    if (pathname === '/api/resend-verification' && req.method === 'POST') {
-      try {
-        const body = await readBody(req);
-        const { username, email } = JSON.parse(body || '{}');
-        const uname = (email ? emailToUser[String(email).trim().toLowerCase()] : null) || (username ? safeUser(username) : null);
-        const acc = uname ? accounts[uname] : null;
-        if (!acc) { res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: '账号不存在' })); return; }
-        if (isVerified(acc)) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true })); return; }
-        if (Date.now() - (acc.verifySentAt || 0) < EMAIL_RESEND_COOLDOWN_MS) {
-          res.writeHead(429, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: false, error: '请 ' + Math.ceil(EMAIL_RESEND_COOLDOWN_MS / 1000) + ' 秒后再试' }));
-          return;
-        }
-        const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
-        const now = Date.now();
-        acc.verifyCode = code; acc.verifyExpires = now + EMAIL_CODE_TTL_MS; acc.verifySentAt = now;
-        saveAccounts();
-        let emailError = false;
-        try {
-          await sendEmail(acc.email, '验证你的旅行看板账号',
-            '<p>你的新邮箱验证码是 <b style="font-size:20px">' + code + '</b>，' +
-            (EMAIL_CODE_TTL_MS / 60000) + ' 分钟内有效。</p>');
-        } catch (e) {
-          emailError = true;
-          console.warn('[email] 重发验证码失败：', e.message);
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, devCode: EMAIL_MODE === 'dev' ? code : undefined, emailError: EMAIL_MODE === 'resend' ? emailError : undefined }));
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: '请求无效' }));
@@ -574,11 +411,8 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/admin/users' && req.method === 'GET') {
       const username = userFromToken(extractToken(req, urlObj));
       if (!username || !isAdmin(username)) { res.writeHead(401); res.end(JSON.stringify({ error: '无权限' })); return; }
-      const list = Object.keys(accounts).map(u => ({
-        user: u, email: accounts[u].email || '', verified: isVerified(accounts[u]), admin: isAdmin(u)
-      }));
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, users: list }));
+      res.end(JSON.stringify({ ok: true, users: Object.keys(accounts) }));
       return;
     }
 

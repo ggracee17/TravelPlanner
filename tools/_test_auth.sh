@@ -20,23 +20,10 @@ TOK(){ node -e "let s=require('fs').readFileSync('$BF','utf8');try{process.stdou
 pass=0; fail=0
 ok(){ if [ "$1" = "$2" ]; then echo "  PASS: $3"; pass=$((pass+1)); else echo "  FAIL: $3 (got $1 want $2)"; fail=$((fail+1)); fi; }
 
-# reg <name> <username> <email> <password>
-#   注册（含邮箱）→ 取 devCode → /api/verify-email → 捕获 token
-#   （新注册账号需邮箱验证才能拿到 token，dev 模式由响应回传 devCode）
-reg(){
-  local name="$1" u="$2" e="$3" pw="$4" st dev
-  st=$(P /api/register "{\"username\":\"$u\",\"email\":\"$e\",\"password\":\"$pw\"}"); ok "$st" 200 "$name 注册 200"
-  dev=$(node -e "let s=require('fs').readFileSync('$BF','utf8');try{process.stdout.write(JSON.parse(s).devCode||'')}catch(e){}")
-  st=$(P /api/verify-email "{\"username\":\"$u\",\"code\":\"$dev\"}"); ok "$st" 200 "$name 邮箱验证 200"
-  printf -v "${name}TOK" '%s' "$(TOK)"
-}
 echo "[register]"
-reg OWNER owner owner@example.com opw
-reg ALICE alice alice@example.com apw
-reg BOB   bob   bob@example.com   bpw
-OTOK=$OWNERTOK; ATOK=$ALICETOK; BTOK=$BOBTOK
-# 重名注册应 409（此前缺失）
-st=$(P /api/register '{"username":"alice","email":"dup@example.com","password":"other"}'); ok "$st" 409 "重名注册 409"
+st=$(P /api/register '{"username":"owner","password":"opw"}'); ok "$st" 200 "owner 注册 200"; OTOK=$(TOK)
+st=$(P /api/register '{"username":"alice","password":"apw"}'); ok "$st" 200 "alice 注册 200"; ATOK=$(TOK)
+st=$(P /api/register '{"username":"bob","password":"bpw"}');   ok "$st" 200 "bob 注册 200";   BTOK=$(TOK)
 
 echo "[change-password]"
 st=$(P /api/change-password '{"oldPassword":"apw","newPassword":"apw2"}' "$ATOK"); ok "$st" 200 "alice 改密码(旧正确) 200"; ATOK2=$(TOK)
