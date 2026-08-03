@@ -100,8 +100,8 @@ const app = {
     this.openModal(this.t('auth.loginTitle'), `
       <p class="text-sm text-slate-600 mb-3">${this.t('auth.loginIntro')}</p>
       <div class="form-field">
-        <label>${this.t('auth.username')}</label>
-        <input id="loginUser" value="${this.sessionUser || ''}" placeholder="如 owner" onkeydown="if(event.key==='Enter')document.getElementById('loginPw').focus()" />
+        <label>${this.t('auth.loginIdentifier')}</label>
+        <input id="loginUser" value="${this.sessionUser || ''}" placeholder="${this.t('auth.loginIdentifier')}" onkeydown="if(event.key==='Enter')document.getElementById('loginPw').focus()" />
       </div>
       <div class="form-field">
         <label>${this.t('auth.password')}</label>
@@ -114,18 +114,23 @@ const app = {
     setTimeout(() => { const i = document.getElementById('loginUser'); if (i) i.focus(); }, 50);
   },
 
-  doUnlock(username, pw) {
-    username = (username || '').trim(); pw = (pw || '').trim();
-    if (!username) return this.toast('请输入用户名', 'warning');
+  doUnlock(identifier, pw) {
+    identifier = (identifier || '').trim(); pw = (pw || '').trim();
+    if (!identifier) return this.toast('请输入用户名或邮箱', 'warning');
     if (!pw) return this.toast('请输入密码', 'warning');
+    const isEmail = identifier.indexOf('@') >= 0;
+    const body = isEmail
+      ? { email: identifier, password: pw }
+      : { username: identifier, password: pw };
     fetch(this.base() + '/api/unlock', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password: pw })
+      body: JSON.stringify(body)
     })
       .then(r => r.json().then(j => ({ status: r.status, j })))
       .then(({ status, j }) => {
-        if (status === 200 && j && j.token) this._applyAuth(username, j.token);
+        if (status === 200 && j && j.token) this._applyAuth(j.username || identifier, j.token);
+        else if (j && j.needsVerification) this.showVerifyEmail(identifier, isEmail ? identifier : '');
         else this.toast((j && j.error) || '用户名或密码错误', 'error');
       })
       .catch(() => this.toast('无法连接服务端', 'error'));
@@ -139,34 +144,87 @@ const app = {
         <input id="regUser" placeholder="如 michael" onkeydown="if(event.key==='Enter')document.getElementById('regPw').focus()" />
       </div>
       <div class="form-field">
+        <label>${this.t('auth.email')}</label>
+        <input id="regEmail" type="email" placeholder="you@example.com" onkeydown="if(event.key==='Enter')document.getElementById('regPw').focus()" />
+        <p class="text-tiny text-slate-500 mt-1">${this.t('auth.emailHint')}</p>
+      </div>
+      <div class="form-field">
         <label>${this.t('auth.password')}</label>
         <input id="regPw" type="password" placeholder="${this.t('auth.password')}" onkeydown="if(event.key==='Enter')document.getElementById('regPw2').focus()" />
       </div>
       <div class="form-field">
         <label>${this.t('auth.confirmPw')}</label>
-        <input id="regPw2" type="password" placeholder="${this.t('auth.confirmPw')}" onkeydown="if(event.key==='Enter')app.doRegister(document.getElementById('regUser').value, document.getElementById('regPw').value, document.getElementById('regPw2').value)" />
+        <input id="regPw2" type="password" placeholder="${this.t('auth.confirmPw')}" onkeydown="if(event.key==='Enter')app.doRegister(document.getElementById('regUser').value, document.getElementById('regEmail').value, document.getElementById('regPw').value, document.getElementById('regPw2').value)" />
       </div>
       <p class="text-tiny text-slate-500 mt-2">${this.t('auth.hasAccount')}<a href="javascript:void(0)" onclick="app.showLogin()" class="text-sky-700 hover:underline">${this.t('auth.backToLogin')}</a></p>
     `, [
-      { text: this.t('auth.registerSubmit'), class: 'btn btn-primary', action: "app.doRegister(document.getElementById('regUser').value, document.getElementById('regPw').value, document.getElementById('regPw2').value)" }
+      { text: this.t('auth.registerSubmit'), class: 'btn btn-primary', action: "app.doRegister(document.getElementById('regUser').value, document.getElementById('regEmail').value, document.getElementById('regPw').value, document.getElementById('regPw2').value)" }
     ]);
     setTimeout(() => { const i = document.getElementById('regUser'); if (i) i.focus(); }, 50);
   },
 
-  doRegister(username, pw, pw2) {
-    username = (username || '').trim(); pw = (pw || '').trim(); pw2 = (pw2 || '').trim();
+  doRegister(username, pw, email, pw2) {
+    username = (username || '').trim(); pw = (pw || '').trim(); email = (email || '').trim(); pw2 = (pw2 || '').trim();
     if (!username) return this.toast('请输入用户名', 'warning');
+    if (!email || email.indexOf('@') < 0) return this.toast('请输入有效的邮箱', 'warning');
     if (pw.length < 1) return this.toast('密码不能为空', 'warning');
     if (pw !== pw2) return this.toast('两次密码不一致', 'warning');
     fetch(this.base() + '/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password: pw })
+      body: JSON.stringify({ username, password: pw, email })
     })
       .then(r => r.json().then(j => ({ status: r.status, j })))
       .then(({ status, j }) => {
-        if (status === 200 && j && j.token) { this.closeModal(); this._applyAuth(username, j.token); }
+        if (status === 200 && j && j.needsVerification) this.showVerifyEmail(j.username || username, j.email || email);
+        else if (status === 200 && j && j.token) { this.closeModal(); this._applyAuth(j.username || username, j.token); }
         else this.toast((j && j.error) || '注册失败', 'error');
+      })
+      .catch(() => this.toast('无法连接服务端', 'error'));
+  },
+
+  // 邮箱验证弹窗：输入 6 位验证码激活账号
+  showVerifyEmail(username, email) {
+    const masked = (email || '').replace(/^(.)(.*)(@.*)$/, (m, a, b, c) => a + (b ? b.replace(/./g, '·') : '') + c);
+    this.openModal(this.t('auth.verifyTitle'), `
+      <p class="text-sm text-slate-600 mb-3">${this.t('auth.verifyIntro', { email: masked })}</p>
+      <div class="form-field">
+        <label>${this.t('auth.emailCode')}</label>
+        <input id="verifyCode" inputmode="numeric" maxlength="6" placeholder="6 位验证码" onkeydown="if(event.key==='Enter')app.doVerifyEmail('${this._esc(username)}', '${this._esc(email)}', document.getElementById('verifyCode').value)" />
+      </div>
+      <p class="text-tiny text-slate-500 mt-2"><a href="javascript:void(0)" onclick="app.doResendVerification('${this._esc(username)}', '${this._esc(email)}')" class="text-sky-700 hover:underline">🔄 ${this.t('auth.resendCode')}</a></p>
+    `, [
+      { text: this.t('auth.verifySubmit'), class: 'btn btn-primary', action: "app.doVerifyEmail('" + this._esc(username) + "', '" + this._esc(email) + "', document.getElementById('verifyCode').value)" }
+    ]);
+    setTimeout(() => { const i = document.getElementById('verifyCode'); if (i) i.focus(); }, 50);
+  },
+
+  doVerifyEmail(username, email, code) {
+    code = (code || '').trim();
+    if (!code) return this.toast('请输入验证码', 'warning');
+    fetch(this.base() + '/api/verify-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email, code })
+    })
+      .then(r => r.json().then(j => ({ status: r.status, j })))
+      .then(({ status, j }) => {
+        if (status === 200 && j && j.token) { this.closeModal(); this._applyAuth(j.username || username, j.token); }
+        else this.toast((j && j.error) || this.t('auth.codeWrong'), 'error');
+      })
+      .catch(() => this.toast('无法连接服务端', 'error'));
+  },
+
+  doResendVerification(username, email) {
+    fetch(this.base() + '/api/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email })
+    })
+      .then(r => r.json().then(j => ({ status: r.status, j })))
+      .then(({ status, j }) => {
+        if (status === 200) this.toast(this.t('auth.codeSent'), 'success');
+        else this.toast((j && j.error) || '重发失败', 'error');
       })
       .catch(() => this.toast('无法连接服务端', 'error'));
   },
