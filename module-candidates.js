@@ -1,6 +1,6 @@
 /* ============================================================
    板块5（精简后）· 行程库
-   录入可复用行程（餐厅 / 景点 / 住宿…），含 地址、营业时间、
+   录入可复用行程（餐饮 / 景点 / 住宿 / 活动…），含 地址、营业时间、
    Google Map 链接、图片；勾选后即时加入当前目的地的「每日行程表」
    第一天，再到板块2 拖拽排序 / 跨日移动，完成精细规划。
    行程库与板块2行程块共用同一编辑表单，双方改动双向同步。
@@ -32,7 +32,7 @@ app.modules.candidates = {
           <button class="btn btn-primary ml-auto" onclick="app.modules.itinerary.openTripForm('newcand','')">${app.t('cand.add')}</button>
         </div>
         <p class="text-sm text-slate-600 mb-4">
-          把还在犹豫的餐厅、景点、住宿等先记在这里，并填好<strong class="text-sky-700">建议时长</strong>。
+          把还在犹豫的餐饮、景点、住宿、活动等到先记在这里，并填好<strong class="text-sky-700">建议时长</strong>。
           <strong class="text-sky-700">勾选「加入行程」</strong>即进入板块2「每日行程表」时间轴（接在当天最后一段之后），
           之后可在时间轴上<strong class="text-sky-700">拖动块</strong>改时间、或拖到别的日期。
           下方排序：<strong>未加入行程的排最前</strong>，已加入的按<strong>所在日程日期</strong>顺序排。
@@ -43,12 +43,12 @@ app.modules.candidates = {
           <div class="empty-state">
             <div class="icon">🧩</div>
             <h3>行程库还是空的</h3>
-            <p class="text-sm">点击右上角「➕ 新增行程库项目」，例如录入 3 家备选餐厅（含地址 / 营业时间 / Google Map 链接 / 图片），勾选心仪的那家即可进入每日行程。</p>
+            <p class="text-sm">点击右上角「➕ 新增行程库项目」，例如录入若干备选地点（含地址 / 营业时间 / Google Map 链接 / 图片），勾选心仪的那项即可进入每日行程。</p>
           </div>
         ` : `
           <div class="flex flex-wrap gap-2 mb-3">
             <button class="btn btn-sm ${filter === '__all' ? 'btn-primary' : 'btn-ghost'}" onclick="app.modules.candidates.setFilter('__all')">全部</button>
-            ${['餐厅','景点','住宿','交通','购物','娱乐','拍照','甜品','小吃','其他'].map(c => `<button class="btn btn-sm ${filter === c ? 'btn-primary' : 'btn-ghost'}" onclick="app.modules.candidates.setFilter('${c}')">${c}</button>`).join('')}
+            ${['餐饮','景点','住宿','交通','购物','娱乐','拍照','甜品','小吃','活动','其他'].map(c => `<button class="btn btn-sm ${filter === c ? 'btn-primary' : 'btn-ghost'}" onclick="app.modules.candidates.setFilter('${c}')">${c}</button>`).join('')}
           </div>
           ${view.length === 0 ? '<p class="text-sm text-slate-400">该分类下暂无行程</p>' : `
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -107,9 +107,10 @@ app.modules.candidates = {
 
   renderCard(c, placed) {
     const typeBadge = {
-      '餐厅': 'badge badge-restaurant', '景点': 'badge badge-spot', '住宿': 'badge badge-hotel',
+      '餐饮': 'badge badge-restaurant', '景点': 'badge badge-spot', '住宿': 'badge badge-hotel',
       '交通': 'badge badge-transport', '购物': 'badge badge-shop',
       '娱乐': 'badge badge-entertainment', '拍照': 'badge badge-photo', '甜品': 'badge badge-dessert', '小吃': 'badge badge-snack',
+      '活动': 'badge badge-activity',
       '其他': 'badge badge-other'
     }[c.type] || 'badge badge-other';
 
@@ -162,7 +163,7 @@ app.modules.candidates = {
     c.checked = want && ok; // 加入失败则保持未勾选
     app.saveState();
     app.renderAll();
-    if (c.checked) app.toast('已加入每日行程（板块2·第一天），去拖拽调整吧', 'success');
+    if (c.checked) app.toast('已加入每日行程（板块2），去拖拽调整吧', 'success');
     else if (want) app.toast('加入失败：请先在板块2生成每日日程', 'warning');
     else app.toast('已从每日行程移除', 'success');
   },
@@ -172,18 +173,19 @@ app.modules.candidates = {
     if (!d) { app.toast('请先在板块1选择目的地', 'warning'); return false; }
     if (!app.state[d.id]) app.state[d.id] = {};
     if (!app.state[d.id].itinerary) app.state[d.id].itinerary = [];
-    const firstDay = app.state[d.id].itinerary
-      .slice()
-      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0];
-    if (!firstDay) {
+    const list = app.state[d.id].itinerary;
+    // 优先加入用户在行程库编辑时选好的「偏好日期」；否则加到第一天
+    let targetDay = c.preferredDayId ? list.find(x => x.id === c.preferredDayId) : null;
+    if (!targetDay) targetDay = list.slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0];
+    if (!targetDay) {
       app.toast('请先在「板块2·每日行程表」生成每日日程，再来勾选备选', 'warning');
       return false;
     }
-    if (!firstDay.spots) firstDay.spots = [];
-    const TYPE_KEY = { '餐厅': 'restaurant', '景点': 'spot', '住宿': 'hotel', '交通': 'transport', '购物': 'shopping', '娱乐': 'entertainment', '拍照': 'photo', '甜品': 'dessert', '小吃': 'snack', '其他': 'other' };
+    if (!targetDay.spots) targetDay.spots = [];
+    const TYPE_KEY = { '餐饮': 'restaurant', '景点': 'spot', '住宿': 'hotel', '交通': 'transport', '购物': 'shopping', '娱乐': 'entertainment', '拍照': 'photo', '甜品': 'dessert', '小吃': 'snack', '活动': 'activity', '其他': 'other' };
     const durH = c.durationH || 2;
-    const start = app.modules.itinerary.defaultStart(firstDay, durH);
-    firstDay.spots.push({
+    const start = app.modules.itinerary.defaultStart(targetDay, durH);
+    targetDay.spots.push({
       id: 'sp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       type: TYPE_KEY[c.type] || 'other',
       name: c.name,
@@ -191,6 +193,8 @@ app.modules.candidates = {
       durationH: durH,
       address: c.address || '',
       hours: c.hours || '',
+      hoursSegments: c.hoursSegments || [],
+      dailyHours: c.dailyHours || {},
       ticket: 0, reservation: '', transport: '', transportCost: 0,
       mapUrl: c.mapUrl || '',
       image: c.image || '',

@@ -172,6 +172,7 @@ table.data-table tr:hover td { background: #f8fafc; }
 .badge-photo     { background: #ccfbf1; color: #115e59; }
 .badge-dessert   { background: #fce7f3; color: #9d174d; }
 .badge-snack     { background: #ffedd5; color: #9a3412; }
+.badge-activity  { background: #dcfce7; color: #166534; }
 .badge-cand     { background: #d1fae5; color: #065f46; font-size: 0.65rem; padding: 0.05rem 0.4rem; }
 
 /* ===== 备选行程库卡片 ===== */
@@ -483,6 +484,7 @@ table.data-table tr:hover td { background: #f8fafc; }
 .blk-photo      .tl-block-cat-v { color:#0d9488; background: rgba(13,148,136,.14); }
 .blk-dessert    .tl-block-cat-v { color:#d946ef; background: rgba(217,70,239,.14); }
 .blk-snack      .tl-block-cat-v { color:#f97316; background: rgba(249,115,22,.14); }
+.blk-activity   .tl-block-cat-v { color:#16a34a; background: rgba(22,163,74,.14); }
 .blk-other      .tl-block-cat-v { color:#475569; background: rgba(71,85,105,.14); }
 /* 短行程块（<1h / <0.5h）精简显示，避免文字被截断 */
 .tl-short { padding: 3px 7px 3px 4px; }
@@ -507,6 +509,7 @@ table.data-table tr:hover td { background: #f8fafc; }
 .blk-photo      { background: #f0fdfa; border-left-color: #0d9488; }
 .blk-dessert    { background: #fdf4ff; border-left-color: #d946ef; }
 .blk-snack      { background: #fff7ed; border-left-color: #f97316; }
+.blk-activity   { background: #f0fdf4; border-left-color: #16a34a; }
 .blk-other      { background: #f8fafc; border-left-color: #64748b; }
 
 /* 旧版 酒店/餐饮 简述（非时间块） */
