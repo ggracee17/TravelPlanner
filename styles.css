@@ -318,6 +318,16 @@ table.data-table tr:hover td { background: #f8fafc; }
 }
 .day-card-body { padding: 1rem; }
 
+.day-weekday {
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.22);
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  margin-left: 0.25rem;
+  vertical-align: middle;
+}
+
 /* ===== 搜索结果卡 ===== */
 .search-result {
   background: white;

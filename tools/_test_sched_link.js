@@ -31,7 +31,7 @@ function makeClient() {
   vm.runInContext(APP_SRC + '\n;globalThis.app = app;', ctx);
   vm.runInContext(ITIN_SRC, ctx);
   ctx.app.modules = ctx.app.modules || {};
-  return { app: ctx.app, els };
+  return { app: ctx.app, els, ctx };
 }
 
 let passed = 0, failed = 0;
@@ -85,6 +85,28 @@ console.log('\n[测试] 营业时间午夜跨越(00:00=24:00) 不再误报非营
   // 无营业时间返回 null
   const r4 = app.modules.itinerary.outsideHours('19:00', 3, '');
   assert(r4 === null, '无营业时间 → null（不报错）');
+}
+
+console.log('\n[测试] 拖拽行程块：开始/结束一起平移，时长不变');
+{
+  const { app, ctx } = makeClient();
+  ctx.window.BOARD_CONFIG = { gmapsApiKey: 'x' }; // 让交通重算走「跳过」分支
+  app.state.destinations = [{ id: 'd1', name: '测试目的地' }];
+  app.state.activeDestinationId = 'd1';
+  app.state.d1 = {
+    itinerary: [{
+      id: 'day1', date: '2026-08-09',
+      spots: [{ id: 's1', name: '午餐', startTime: '10:00', durationH: 2, endTime: '12:00' }]
+    }]
+  };
+  app.state.ecoMode = true;
+
+  app.modules.itinerary.moveSpotToTime('s1', 'day1', '14:00');
+
+  const spot = app.state.d1.itinerary[0].spots[0];
+  assert(spot.startTime === '14:00', '拖到 14:00 → 开始时间=14:00 (实际 ' + spot.startTime + ')');
+  assert(spot.endTime === '16:00', '结束时间随开始一起平移 14:00+2h=16:00 (实际 ' + spot.endTime + ')');
+  assert(parseFloat(spot.durationH) === 2, '时长(durationH)保持不变=2h (实际 ' + spot.durationH + ')');
 }
 
 console.log('\n========== 结果: ' + passed + ' 通过, ' + failed + ' 失败 ==========');

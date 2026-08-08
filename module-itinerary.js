@@ -68,6 +68,13 @@ function itinEndTime(start, dur) {
   return itinNumToTime(itinTimeToNum(start) + (parseFloat(dur) || 1));
 }
 function itinSnap(n) { return Math.round(n * 2) / 2; } // 半小时吸附
+function itinWeekdayLabel(dateStr) {
+  if (!dateStr || !/^\d{4}-\d{1,2}-\d{1,2}$/.test(dateStr)) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d); // 用本地时间构造，避免 UTC 偏移导致错位
+  if (isNaN(dt.getTime())) return '';
+  return '周' + '日一二三四五六'[dt.getDay()];
+}
 
 app.modules.itinerary = {
 
@@ -186,7 +193,7 @@ app.modules.itinerary = {
       <div class="day-card">
         <div class="day-card-header">
           <div>
-            <div class="text-lg font-bold">Day ${idx + 1} · ${day.date || '未填日期'}</div>
+            <div class="text-lg font-bold">Day ${idx + 1} · ${day.date || '未填日期'}${day.date ? ` <span class="day-weekday">${itinWeekdayLabel(day.date)}</span>` : ''}</div>
             <div class="text-xs opacity-90">${day.weather || '天气未填'}　·　行程块 ${spots.length} 个　·　门票 ¥${totalTicket.toFixed(0)}</div>
           </div>
           <div class="flex gap-2">
@@ -446,6 +453,9 @@ app.modules.itinerary = {
     if (!toDay) return;
     if (!toDay.spots) toDay.spots = [];
     found.startTime = newStart;
+    // 拖动时让开始、结束时间一起平移，时长(durationH)保持不变
+    const durH = parseFloat(found.durationH) || 1;
+    found.endTime = itinNumToTime(itinTimeToNum(newStart) + durH);
     toDay.spots.push(found);
     toDay.spots.sort((a, b) => itinTimeToNum(a.startTime) - itinTimeToNum(b.startTime));
     // 移动后相邻段交通时间已失效：配置了 API Key 且未开「省 Credits」则自动重算；
@@ -855,7 +865,7 @@ app.modules.itinerary = {
           if (sp) { placed = sp; placedDayId = dy.id; break; }
         }
         dayOptions = days.map((dy, i) =>
-          `<option value="${dy.id}" ${dy.id === placedDayId ? 'selected' : ''}>Day ${i + 1} · ${dy.date || '未填日期'}</option>`
+          `<option value="${dy.id}" ${dy.id === placedDayId ? 'selected' : ''}>Day ${i + 1} · ${dy.date || '未填日期'}${dy.date ? ' ' + itinWeekdayLabel(dy.date) : ''}</option>`
         ).join('');
         if (mode === 'cand') {
           cand = cands.find(x => x.id === a);

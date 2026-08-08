@@ -27,10 +27,10 @@ app.modules.expenses = {
     const rate = parseFloat(d.audToTwd) || 21;   // 1 澳币 = ? 台币
     const travelers = Math.max(1, parseFloat(d.travelers) || 1);          // 本次旅行人数
     const tripPeople = (Array.isArray(d.tripPeople) && d.tripPeople.length) ? d.tripPeople : ['我'];
-    // 计价：single=仅我一人（不按人数翻倍）；total=总价；per=单人价格×旅行人数；旧数据无 priceType 回落原 people
+    // 计价：single=仅一人（不按人数翻倍）；total=总价；per=单人价格×旅行人数；旧数据无 priceType 回落原 people
     const twdOf = (e) => {
       const unit = (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
-      if (e.single) return unit; // 仅我一人：不乘旅行人数
+      if (e.single) return unit; // 仅一人：不乘旅行人数
       if (e.priceType === 'total') return unit;
       const mult = (e.priceType === undefined) ? (parseFloat(e.people) || 1) : travelers;
       return unit * mult;
@@ -207,13 +207,18 @@ app.modules.expenses = {
                 <tr><th>日期</th><th>分类</th><th>详情</th><th>金额</th><th>计价</th><th>付款人</th><th>支付方式</th><th>操作</th></tr>
               </thead>
               <tbody>
-                ${expenses.map(e => `
+                ${expenses.map(e => {
+                  const amt = parseFloat(e.amount) || 0;
+                  const twd = twdOf(e);
+                  const primary = e.currency === 'AUD' ? `A$${amt.toFixed(2)}` : `¥${amt.toFixed(2)}`;
+                  const other = e.currency === 'AUD' ? `≈ ¥${twd.toFixed(0)}` : `≈ A$${(twd / rate).toFixed(0)}`;
+                  return `
                   <tr>
                     <td class="text-tiny">${e.date || '-'}</td>
                     <td>${catLabels[e.category] || ''} ${e.category}</td>
                     <td>${e.detail || '-'}${e.merchant ? ` <span class="text-tiny text-slate-500">· ${e.merchant}</span>` : ''}</td>
-                    <td class="font-semibold">${e.currency === 'AUD' ? 'A$' : '¥'}${(parseFloat(e.amount) || 0).toFixed(2)}<div class="text-tiny text-slate-500 font-normal mt-0.5">总额 ¥${twdOf(e).toFixed(0)} · ≈ A$${(twdOf(e) / rate).toFixed(0)}</div></td>
-                    <td><span class="badge ${e.single ? 'badge-shop' : e.priceType === 'total' ? 'badge-other' : 'badge-hotel'}">${e.single ? '仅我' : e.priceType === 'total' ? '总价' : '单人'}</span></td>
+                    <td class="font-semibold">${primary}<div class="text-tiny text-slate-500 font-normal mt-0.5">${other}</div></td>
+                    <td><span class="badge ${e.single ? 'badge-shop' : e.priceType === 'total' ? 'badge-other' : 'badge-hotel'}">${e.single ? '仅一人' : e.priceType === 'total' ? '总价' : '单人'}</span></td>
                     <td class="text-tiny">${e.paidBy || '-'}</td>
                     <td class="text-tiny">${e.payment || '-'}</td>
                     <td>
@@ -221,7 +226,8 @@ app.modules.expenses = {
                       <button class="btn btn-danger btn-sm" onclick="app.modules.expenses.removeExp('${e.id}')">🗑️</button>
                     </td>
                   </tr>
-                `).join('')}
+                `;
+                }).join('')}
               </tbody>
               <tfoot>
                 <tr style="background:#f1f5f9;font-weight:600">
@@ -314,7 +320,7 @@ app.modules.expenses = {
         <div class="form-field col-span-full">
           <label style="display:flex;align-items:center;gap:0.5rem;font-weight:400;text-transform:none;color:#334155;cursor:pointer;">
             <input type="checkbox" id="e_single" ${e.single ? 'checked' : ''} />
-            🙋 仅我一人（不按旅行人数翻倍，例如给自己买的伴手礼；可在「谁付的款」选自己）
+            🙋 仅一人（不按旅行人数翻倍，例如给自己买的伴手礼；可在「谁付的款」选自己）
           </label>
         </div>
         <div class="form-field">
@@ -349,7 +355,7 @@ app.modules.expenses = {
     const isSingle = singleEl && singleEl.checked;
     prev.textContent = amt > 0
       ? (isSingle
-          ? `🙋 仅我一人：总额 ≈ 台币 ¥${unit.toFixed(0)}（不乘 ${travelers} 人，≈ A$${(unit / rate).toFixed(0)}）`
+          ? `🙋 仅一人：总额 ≈ 台币 ¥${unit.toFixed(0)}（不乘 ${travelers} 人，≈ A$${(unit / rate).toFixed(0)}）`
           : isTotal
             ? `💱 总价 ≈ 台币 ¥${unit.toFixed(0)}（已含 ${travelers} 人，每人 ≈ ¥${(unit / travelers).toFixed(0)}）`
             : `💱 单人 ≈ 台币 ¥${unit.toFixed(0)}　·　${travelers} 人合计 ≈ 台币 ¥${(unit * travelers).toFixed(0)}（1 澳币 = ${rate} 台币）`)
