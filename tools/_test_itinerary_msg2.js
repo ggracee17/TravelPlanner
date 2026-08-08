@@ -98,5 +98,19 @@ assert(placed.dailyHours && placed.dailyHours['6'] && placed.dailyHours['6'][0].
 app.modules.candidates.removeFromItinerary('c1');
 assert(app.state.d1.itinerary[1].spots.length === 0, '取消勾选后从行程表移除');
 
+console.log('\n[测试] 每日营业时间区：默认折叠，展开后才显示（消息4）');
+const htmlEmpty = itin._commonFields({});
+assert(htmlEmpty.includes('<details class="dh-details"'), '每日营业时间区使用 <details> 折叠容器');
+assert(!htmlEmpty.includes('dh-details" open') && !htmlEmpty.includes('dh-details open'), '无每日营业时间数据时，默认【折叠】（无 open 属性）');
+// 折叠时内部 DOM 仍需存在，否则 saveTrip 收集不到
+assert(htmlEmpty.includes('id="t_daily_hours"'), '折叠时 #t_daily_hours 容器仍在 DOM 中');
+const rowsEmpty = (htmlEmpty.match(/data-dh="/g) || []).length;
+assert(rowsEmpty === 7, `折叠时 7 个星期行（data-dh）仍在 DOM 中（实际 ${rowsEmpty}）`);
+
+const htmlWith = itin._commonFields({ dailyHours: { '1': [{ open: '10:00', close: '18:00' }] } });
+assert(htmlWith.includes('<details class="dh-details" open>'), '已设置每日营业时间时，默认【展开】（带 open 属性）');
+const rowsWith = (htmlWith.match(/data-dh="/g) || []).length;
+assert(rowsWith === 7, `展开时 7 个星期行（data-dh）均在 DOM 中（实际 ${rowsWith}）`);
+
 console.log(`\n========== 结果: ${passed} 通过, ${failed} 失败 ==========`);
 process.exit(failed ? 1 : 0);

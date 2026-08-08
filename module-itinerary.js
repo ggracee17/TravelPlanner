@@ -785,6 +785,9 @@ app.modules.itinerary = {
       .map(([k, v]) => `<option value="${k}" ${k === s.type ? 'selected' : ''}>${v.label}</option>`).join('');
     const WD = [['周一',1],['周二',2],['周三',3],['周四',4],['周五',5],['周六',6],['周日',0]];
     const closed = Array.isArray(s.closedDays) ? s.closedDays : [];
+    // 若已设置过每日营业时间，则默认展开，方便用户看到已有数据；否则默认折叠
+    const hasDaily = !!(s.dailyHours && Object.values(s.dailyHours)
+      .some(arr => Array.isArray(arr) && arr.length && arr[0] && (arr[0].open || arr[0].close)));
     return `
       <div class="form-field col-span-full"><label>名称 <span class="req">*</span></label><input id="t_name" value="${s.name || ''}" placeholder="如：台北101" /></div>
       <div class="form-field"><label>分类</label><select id="t_type">${typeOpts}</select></div>
@@ -796,22 +799,24 @@ app.modules.itinerary = {
         <div class="text-tiny text-slate-500 mt-1">从列表选择每段开始/结束时间（如 14:00~16:00）；未添加分段 = 不限制营业时间。可叠加多段（如午市+晚市）。</div>
       </div>
       <div class="form-field col-span-full">
-        <label>🗓️ 每日营业时间（若每天不同，分别设置；留空则该天沿用上方通用营业时间）</label>
-        <div id="t_daily_hours" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
-          ${WD.map(([label, wd]) => {
-            const seg = (s.dailyHours && s.dailyHours[wd] && s.dailyHours[wd][0]) || null;
-            const dhOpts = (sel) => '<option value="">— 不填 —</option>' + this.itinTimeOptions(sel || '09:00', 5);
-            return `
-            <div class="flex gap-2 items-center mb-1" data-dh="${wd}">
-              <span class="w-10 text-slate-600 text-sm shrink-0">${label}</span>
-              <select class="t_dh_open flex-1">${dhOpts(seg ? seg.open : '')}</select>
-              <span class="text-slate-500">~</span>
-              <select class="t_dh_close flex-1">${dhOpts(seg ? seg.close : '')}</select>
-              <button type="button" class="btn btn-ghost btn-sm shrink-0" onclick="app.modules.itinerary.clearDailyHour(this)">清除</button>
-            </div>`;
-          }).join('')}
-        </div>
-        <div class="text-tiny text-slate-500 mt-1">按星期分别设置（如周一至周五 09:00~17:00，周末 09:00~18:00）。某天留空即沿用上方通用营业时间；时间轴会按当天星期校验「非营业」提示。</div>
+        <details class="dh-details" ${hasDaily ? 'open' : ''}>
+          <summary class="dh-summary">🗓️ 每日营业时间（若每天不同，分别设置；留空则该天沿用上方通用营业时间）</summary>
+          <div id="t_daily_hours" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 mt-2">
+            ${WD.map(([label, wd]) => {
+              const seg = (s.dailyHours && s.dailyHours[wd] && s.dailyHours[wd][0]) || null;
+              const dhOpts = (sel) => '<option value="">— 不填 —</option>' + this.itinTimeOptions(sel || '09:00', 5);
+              return `
+              <div class="flex gap-2 items-center mb-1" data-dh="${wd}">
+                <span class="w-10 text-slate-600 text-sm shrink-0">${label}</span>
+                <select class="t_dh_open flex-1">${dhOpts(seg ? seg.open : '')}</select>
+                <span class="text-slate-500">~</span>
+                <select class="t_dh_close flex-1">${dhOpts(seg ? seg.close : '')}</select>
+                <button type="button" class="btn btn-ghost btn-sm shrink-0" onclick="app.modules.itinerary.clearDailyHour(this)">清除</button>
+              </div>`;
+            }).join('')}
+          </div>
+          <div class="text-tiny text-slate-500 mt-1">按星期分别设置（如周一至周五 09:00~17:00，周末 09:00~18:00）。某天留空即沿用上方通用营业时间；时间轴会按当天星期校验「非营业」提示。点击上方标题可展开/收起。</div>
+        </details>
       </div>
       <div class="form-field col-span-full">
         <label>🚫 固定休息日（每周不营业的星期）</label>
