@@ -59,15 +59,23 @@ console.log('\n[测试] 行程块 开始/时长/结束 联动 onSchedChange');
   app.modules.itinerary.onSchedChange('dur');
   assert(els.t_end.value === '23:55', '23:00 + 2h 超出下拉上限 → 封顶23:55 (实际 ' + els.t_end.value + ')');
 
-  // 改「结束」→ 时长 = 结束 - 开始
-  els.t_start.value = '09:00'; els.t_dur.value = '2'; els.t_end.value = '12:30';
+  // 改「结束」→ 时长不变，开始时间 = 结束 - 时长（整块平移）
+  els.t_start.value = '09:00'; els.t_dur.value = '2'; els.t_end.value = '16:00';
   app.modules.itinerary.onSchedChange('end');
-  assert(parseFloat(els.t_dur.value) === 3.5, '结束12:30 - 开始09:00 → 时长3.5h (实际 ' + els.t_dur.value + ')');
+  assert(els.t_start.value === '14:00', '结束16:00 - 时长2h → 开始平移到14:00 (实际 ' + els.t_start.value + ')');
+  assert(parseFloat(els.t_dur.value) === 2, '改结束时间 → 时长保持不变2h (实际 ' + els.t_dur.value + ')');
 
-  // 结束早于开始 → 时长不更新
+  // 结束早于开始但差值仍为正 → 开始 = 结束 - 时长（不钳制）
   els.t_start.value = '10:00'; els.t_dur.value = '2'; els.t_end.value = '09:00';
   app.modules.itinerary.onSchedChange('end');
-  assert(parseFloat(els.t_dur.value) === 2, '结束早于开始 → 时长保持不变2h (实际 ' + els.t_dur.value + ')');
+  assert(els.t_start.value === '07:00', '结束09:00 - 时长2h → 开始07:00 (实际 ' + els.t_start.value + ')');
+  assert(parseFloat(els.t_dur.value) === 2, '时长保持不变2h (实际 ' + els.t_dur.value + ')');
+
+  // 结束 - 时长 为负 → 开始钳到 00:00，时长仍不变
+  els.t_start.value = '10:00'; els.t_dur.value = '2'; els.t_end.value = '01:00';
+  app.modules.itinerary.onSchedChange('end');
+  assert(els.t_start.value === '00:00', '结束01:00 - 时长2h 为负 → 开始钳到00:00 (实际 ' + els.t_start.value + ')');
+  assert(parseFloat(els.t_dur.value) === 2, '钳制开始 → 时长仍保持不变2h (实际 ' + els.t_dur.value + ')');
 }
 
 console.log('\n[测试] 营业时间午夜跨越(00:00=24:00) 不再误报非营业');
