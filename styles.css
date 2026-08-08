@@ -373,6 +373,14 @@ table.data-table tr:hover td { background: #f8fafc; }
 }
 .itinerary-rows > .day-card { flex: 0 0 320px; margin-bottom: 0; }
 
+/* 紧凑视图：缩短每日列宽度，让更多日期在同一屏横向同显 */
+.itinerary-rows.compact { gap: 0.5rem; }
+.itinerary-rows.compact > .day-card { flex: 0 0 230px; }
+.itinerary-rows.compact .day-card-header { padding: 0.5rem 0.6rem; }
+.itinerary-rows.compact .day-card-body { padding: 0.5rem; }
+.itinerary-rows.compact .tl-block-title { font-size: 0.72rem; }
+.itinerary-rows.compact .tl-block-time { font-size: 0.6rem; }
+
 .timeline {
   position: relative;
   background:

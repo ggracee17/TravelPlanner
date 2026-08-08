@@ -25,12 +25,12 @@ app.modules.expenses = {
 
     const expenses = (app.state[d.id]?.expenses || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const rate = parseFloat(d.audToTwd) || 21;   // 1 澳币 = ? 台币
-    const twdOf = (e) => (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
+    const twdOf = (e) => { const p = parseFloat(e.people) || 1; const u = (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0)); return u * p; };
     const total = expenses.reduce((s, e) => s + twdOf(e), 0);
 
-    // 逐项预算：每个 budget 项 { id, name, amount, currency }，汇总成台币
+    // 逐项预算：每个 budget 项 { id, name, amount, currency, people }，汇总成台币
     const budgets = (app.state[d.id]?.budgets || []).slice();
-    const bTwdOf = (b) => (b.currency === 'AUD' ? (parseFloat(b.amount) || 0) * rate : (parseFloat(b.amount) || 0));
+    const bTwdOf = (b) => { const p = parseFloat(b.people) || 1; const u = (b.currency === 'AUD' ? (parseFloat(b.amount) || 0) * rate : (parseFloat(b.amount) || 0)); return u * p; };
     const budget = app.getBudgetTotal(d.id);
     const pct = budget > 0 ? (total / budget) * 100 : 0;
     const remaining = budget - total;
@@ -78,13 +78,14 @@ app.modules.expenses = {
           ` : `
             <div class="overflow-x-auto">
               <table class="data-table">
-                <thead><tr><th>预算项</th><th>货币</th><th>金额</th><th>折合台币</th><th>操作</th></tr></thead>
+                <thead><tr><th>预算项</th><th>货币</th><th>金额</th><th>人数</th><th>折合台币</th><th>操作</th></tr></thead>
                 <tbody>
                   ${budgets.map(b => `
                     <tr>
                       <td>${b.name || '-'}</td>
                       <td>${b.currency === 'AUD' ? '澳币 (A$)' : '台币 (NT$)'}</td>
                       <td class="font-semibold">${b.currency === 'AUD' ? 'A$' : '¥'}${(parseFloat(b.amount) || 0).toFixed(2)}</td>
+                      <td class="text-slate-600">${parseFloat(b.people) || 1} 人</td>
                       <td class="text-slate-600">¥${bTwdOf(b).toFixed(0)}</td>
                       <td>
                         <button class="btn btn-ghost btn-sm" onclick="app.modules.expenses.editBudget('${b.id}')">✏️</button>
@@ -95,8 +96,8 @@ app.modules.expenses = {
                 </tbody>
                 <tfoot>
                   <tr style="background:#f1f5f9;font-weight:600">
-                    <td colspan="3" class="text-right">${app.t('expense.budgetTotal')}（台币）</td>
-                    <td>¥${budget.toFixed(2)}</td>
+                    <td colspan="4" class="text-right">${app.t('expense.budgetTotal')}（台币）</td>
+                    <td>¥${budget.toFixed(2)} <span class="text-tiny text-slate-500">≈ A$${(budget / rate).toFixed(0)}</span></td>
                     <td></td>
                   </tr>
                 </tfoot>
@@ -110,6 +111,7 @@ app.modules.expenses = {
           <div class="p-4 bg-gradient-to-br from-sky-50 to-sky-100 rounded-lg border border-sky-200">
             <div class="text-xs text-sky-700 font-semibold">💰 总预算</div>
             <div class="text-2xl font-bold text-sky-800">¥${budget.toFixed(0)}</div>
+            <div class="text-xs text-sky-600 mt-0.5">≈ A$${(budget / rate).toFixed(0)}</div>
           </div>
           <div class="p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg border border-orange-200">
             <div class="text-xs text-orange-700 font-semibold">📊 已支出</div>
@@ -157,7 +159,7 @@ app.modules.expenses = {
           <div class="overflow-x-auto">
             <table class="data-table">
               <thead>
-                <tr><th>日期</th><th>分类</th><th>详情</th><th>金额</th><th>支付方式</th><th>操作</th></tr>
+                <tr><th>日期</th><th>分类</th><th>详情</th><th>金额</th><th>人数</th><th>商家</th><th>付款人</th><th>支付方式</th><th>操作</th></tr>
               </thead>
               <tbody>
                 ${expenses.map(e => `
@@ -166,6 +168,9 @@ app.modules.expenses = {
                     <td>${catLabels[e.category] || ''} ${e.category}</td>
                     <td>${e.detail || '-'}</td>
                     <td class="font-semibold">${e.currency === 'AUD' ? 'A$' : '¥'}${(parseFloat(e.amount) || 0).toFixed(2)}${e.currency === 'AUD' ? ` <span class="text-tiny text-slate-500">· ≈ 台币 ¥${twdOf(e).toFixed(0)}</span>` : ''}</td>
+                    <td class="text-tiny">${parseFloat(e.people) || 1} 人</td>
+                    <td class="text-tiny">${e.merchant || '-'}</td>
+                    <td class="text-tiny">${e.paidBy || '-'}</td>
                     <td class="text-tiny">${e.payment || '-'}</td>
                     <td>
                       <button class="btn btn-ghost btn-sm" onclick="app.modules.expenses.editExp('${e.id}')">✏️</button>
@@ -178,7 +183,7 @@ app.modules.expenses = {
                 <tr style="background:#f1f5f9;font-weight:600">
                   <td colspan="3" class="text-right">合计（台币）</td>
                   <td>¥${total.toFixed(2)}</td>
-                  <td colspan="2"></td>
+                  <td colspan="5"></td>
                 </tr>
               </tfoot>
             </table>
@@ -249,6 +254,26 @@ app.modules.expenses = {
             <option ${!e.payment?'selected':''}>其他</option>
           </select>
         </div>
+        <div class="form-field">
+          <label>人数</label>
+          <input type="number" id="e_people" value="${parseFloat(e.people) || 1}" min="1" step="1" title="该笔消费涉及几个人，金额会按人数累加（如机票单人 700、2 人则合计 1400）" />
+        </div>
+        <div class="form-field">
+          <label>商家名称</label>
+          <input id="e_merchant" value="${e.merchant || ''}" placeholder="如：7-11 / 全家 / 高岛屋" />
+        </div>
+        <div class="form-field">
+          <label>谁付的款</label>
+          <select id="e_paidby">
+            <option ${e.paidBy==='我' || !e.paidBy?'selected':''}>我</option>
+            <option ${e.paidBy==='伴侣'?'selected':''}>伴侣</option>
+            <option ${e.paidBy==='朋友'?'selected':''}>朋友</option>
+            <option ${e.paidBy==='家庭'?'selected':''}>家庭</option>
+            <option ${e.paidBy==='公司'?'selected':''}>公司</option>
+            <option ${e.paidBy && !['我','伴侣','朋友','家庭','公司'].includes(e.paidBy)?'selected':''}>${e.paidBy || ''}</option>
+            <option ${e.paidBy==='其他'?'selected':''}>其他</option>
+          </select>
+        </div>
       </div>
     `;
     app.openModal(existing ? '✏️ 编辑消费' : '➕ 记一笔消费', html, [
@@ -261,13 +286,18 @@ app.modules.expenses = {
   updatePreview() {
     const amtEl = document.getElementById('e_amount');
     const curEl = document.getElementById('e_currency');
+    const peopleEl = document.getElementById('e_people');
     const prev = document.getElementById('e_twd_prev');
     if (!amtEl || !curEl || !prev) return;
     const d = app.getActiveDestination();
     const rate = parseFloat(d && d.audToTwd) || 21;
     const amt = parseFloat(amtEl.value) || 0;
-    const twd = curEl.value === 'AUD' ? amt * rate : amt;
-    prev.textContent = amt > 0 ? `💱 ≈ 台币 ¥${twd.toFixed(0)}（汇率 1 澳币 = ${rate} 台币）` : '';
+    const people = parseInt(peopleEl && peopleEl.value, 10) || 1;
+    const unit = curEl.value === 'AUD' ? amt * rate : amt;
+    const twd = unit * people;
+    prev.textContent = amt > 0
+      ? `💱 单笔 ≈ 台币 ¥${unit.toFixed(0)}　·　${people} 人合计 ≈ 台币 ¥${twd.toFixed(0)}（1 澳币 = ${rate} 台币）`
+      : '';
   },
 
   save(id) {
@@ -284,7 +314,10 @@ app.modules.expenses = {
       date, detail, amount,
       currency: document.getElementById('e_currency').value,
       category: document.getElementById('e_cat').value,
-      payment: document.getElementById('e_payment').value
+      payment: document.getElementById('e_payment').value,
+      people: parseInt(document.getElementById('e_people').value, 10) || 1,
+      merchant: document.getElementById('e_merchant').value.trim(),
+      paidBy: document.getElementById('e_paidby').value
     };
 
     if (!app.state[d.id]) app.state[d.id] = {};
@@ -358,6 +391,10 @@ app.modules.expenses = {
           <input type="number" id="b_amount" value="${b.amount || ''}" min="0" step="0.01" oninput="app.modules.expenses.updateBudgetPreview()" />
           <div class="text-tiny text-slate-500 mt-1" id="b_twd_prev"></div>
         </div>
+        <div class="form-field">
+          <label>人数</label>
+          <input type="number" id="b_people" value="${parseFloat(b.people) || 1}" min="1" step="1" title="该预算项涉及几个人，金额会按人数累加（如机票单人 700、2 人则合计 1400）" />
+        </div>
       </div>
     `;
     app.openModal(existing ? '✏️ 编辑预算项' : '➕ 添加预算项', html, [
@@ -370,13 +407,18 @@ app.modules.expenses = {
   updateBudgetPreview() {
     const amtEl = document.getElementById('b_amount');
     const curEl = document.getElementById('b_currency');
+    const peopleEl = document.getElementById('b_people');
     const prev = document.getElementById('b_twd_prev');
     if (!amtEl || !curEl || !prev) return;
     const d = app.getActiveDestination();
     const rate = parseFloat(d && d.audToTwd) || 21;
     const amt = parseFloat(amtEl.value) || 0;
-    const twd = curEl.value === 'AUD' ? amt * rate : amt;
-    prev.textContent = amt > 0 ? `💱 ≈ 台币 ¥${twd.toFixed(0)}（汇率 1 澳币 = ${rate} 台币）` : '';
+    const people = parseInt(peopleEl && peopleEl.value, 10) || 1;
+    const unit = curEl.value === 'AUD' ? amt * rate : amt;
+    const twd = unit * people;
+    prev.textContent = amt > 0
+      ? `💱 单项 ≈ 台币 ¥${unit.toFixed(0)}　·　${people} 人合计 ≈ 台币 ¥${twd.toFixed(0)}（1 澳币 = ${rate} 台币）`
+      : '';
   },
 
   saveBudget(id) {
@@ -390,7 +432,8 @@ app.modules.expenses = {
     const data = {
       name,
       amount,
-      currency: document.getElementById('b_currency').value
+      currency: document.getElementById('b_currency').value,
+      people: parseInt(document.getElementById('b_people').value, 10) || 1
     };
 
     if (!app.state[d.id]) app.state[d.id] = {};
@@ -452,11 +495,11 @@ app.modules.expenses = {
     if (expenses.length === 0) return app.toast('暂无消费记录', 'warning');
 
     const rate = parseFloat(d.audToTwd) || 21;
-    const twdOf = (e) => (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
+    const twdOf = (e) => { const p = parseFloat(e.people) || 1; const u = (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0)); return u * p; };
     const rows = expenses.map(e => ({
       日期: e.date, 分类: e.category, 详情: e.detail,
-      货币: e.currency === 'AUD' ? '澳币' : '台币', 原金额: e.amount,
-      台币: Math.round(twdOf(e)), 支付方式: e.payment
+      货币: e.currency === 'AUD' ? '澳币' : '台币', 原金额: e.amount, 人数: e.people || 1,
+      台币: Math.round(twdOf(e)), 商家: e.merchant || '', 付款人: e.paidBy || '', 支付方式: e.payment
     }));
     const totalTwd = expenses.reduce((s, e) => s + twdOf(e), 0);
     rows.push({ 日期: '', 分类: '合计', 详情: '', 货币: '', 原金额: '', 台币: Math.round(totalTwd), 支付方式: '' });

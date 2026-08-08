@@ -127,7 +127,7 @@ app.modules.itinerary = {
             <p class="text-sm">点击右上角「⚡ 按日期自动生成空白日程」一键按起止日期生成全部空日程，再拖入行程块</p>
           </div>
         ` : `
-          <div class="itinerary-rows">
+          <div class="itinerary-rows ${app.state.itineraryZoom === 'compact' ? 'compact' : ''}">
             ${days.map((day, idx) => this.renderDayColumn(day, idx, d, expanded)).join('')}
           </div>
         `}
@@ -227,7 +227,7 @@ app.modules.itinerary = {
     const leftStyle = `calc(${LP}px + (100% - ${LP + RP}px) * ${lane} / ${lanes})`;
     const widthStyle = `calc((100% - ${LP + RP}px) / ${lanes} - ${GAP}px)`;
     // 开始时间不在营业时间内的提示
-    const warn = this.outsideHours(s.startTime, dur, s.hours);
+    const warn = this.outsideHours(s.startTime, dur, s.hoursSegments || s.hours);
     let flags = '';
     if (!isShort) {
       if (s.reservation === 'needed') flags += '<span class="tl-flag">需预约</span>';
@@ -248,7 +248,7 @@ app.modules.itinerary = {
       <div class="tl-block-main">
         ${!isXShort && s.travelFromPrev ? `<div class="tl-travel">${this.travelIcon(s.travelFromPrev.mode)} ${s.travelFromPrev.durText}${s.travelFromPrev.distText ? ' · ' + s.travelFromPrev.distText : ''}${s.travelFromPrev.unavailable ? '（无法计算）' : '　距上一站'}</div>` : ''}
         <div class="tl-block-title">${s.name || '未命名'}</div>
-        ${isXShort ? '' : `<div class="tl-block-time">${s.startTime || '--:--'}–${itinEndTime(s.startTime, dur)} · ${dur}h</div>`}
+        ${isXShort ? '' : `<div class="tl-block-time">${s.startTime || '--:--'}–${s.endTime || itinEndTime(s.startTime, dur)} · ${dur}h</div>`}
         ${flags ? `<div class="tl-flags">${flags}</div>` : ''}
       </div>
       </div>`;
@@ -296,17 +296,18 @@ app.modules.itinerary = {
     return result;
   },
 
-  /* 判断行程开始/结束时间是否落在营业时间之外；返回提示文案或 null */
+  /* 判断行程开始/结束时间是否落在营业时间之外；支持多段。返回提示文案或 null */
   outsideHours(start, dur, hours) {
-    if (!hours) return null;
-    const m = hours.match(/(\d{1,2}:\d{2})\s*[-~至到]\s*(\d{1,2}:\d{2})/);
-    if (!m) return null;
-    const open = itinTimeToNum(m[1]), close = itinTimeToNum(m[2]);
+    const segs = Array.isArray(hours) ? hours : this.parseLegacyHours(hours || '');
+    if (!segs || !segs.length) return null;
     const st = itinTimeToNum(start), en = st + (parseFloat(dur) || 1);
-    if (st < open - 1e-6 || en > close + 1e-6) {
-      return `营业时间 ${m[1]}–${m[2]}，当前安排 ${itinNumToTime(st)}–${itinNumToTime(en)}`;
-    }
-    return null;
+    const inAny = segs.some(g => {
+      const o = itinTimeToNum(g.open), c = itinTimeToNum(g.close);
+      return st >= o - 1e-6 && en <= c + 1e-6;
+    });
+    if (inAny) return null;
+    const rangeText = segs.map(g => `${g.open}–${g.close}`).join(' / ');
+    return `营业时间 ${rangeText}，当前安排 ${itinNumToTime(st)}–${itinNumToTime(en)}`;
   },
 
   /* ===== 拖拽：改时间 / 跨日 ===== */
@@ -663,14 +664,70 @@ app.modules.itinerary = {
            'cand' 编辑行程库项目 (a=candId)
            'newcand' 新增行程库项目
      ============================================================ */
+  /* 生成 00:00–23:30（30 分钟一档）的时间下拉选项 */
+  itinTimeOptions(sel) {
+    let o = '';
+    for (let h = 0; h < 24; h++) for (const m of [0, 30]) {
+      const v = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+      o += `<option value="${v}" ${v === sel ? 'selected' : ''}>${v}</option>`;
+    }
+    return o;
+  },
+
+  /* 解析旧版营业时间字符串为分段数组；支持 "09:00-22:00" 及多段用 , ; 、 或换行分隔 */
+  parseLegacyHours(str) {
+    if (!str || typeof str !== 'string') return [];
+    const segs = [];
+    str.split(/[,;、\n]+/).map(x => x.trim()).filter(Boolean).forEach(p => {
+      const m = p.match(/(\d{1,2}:\d{2})\s*[-~至到]\s*(\d{1,2}:\d{2})/);
+      if (m) segs.push({ open: m[1], close: m[2] });
+    });
+    return segs;
+  },
+
+  /* 取得营业时间分段：优先用结构化 hoursSegments，否则回退解析旧字符串 */
+  hoursToSegments(s) {
+    if (s && Array.isArray(s.hoursSegments) && s.hoursSegments.length) return s.hoursSegments;
+    return this.parseLegacyHours(s && s.hours);
+  },
+
+  /* 单个营业时间分段的行（开放/结束两个下拉 + 删除） */
+  hoursSegRow(i, seg) {
+    seg = seg || {};
+    return `
+      <div class="flex gap-2 items-center mb-1" data-seg="${i}">
+        <select class="t_hours_open flex-1">${this.itinTimeOptions(seg.open)}</select>
+        <span class="text-slate-500">~</span>
+        <select class="t_hours_close flex-1">${this.itinTimeOptions(seg.close)}</select>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="app.modules.itinerary.removeHoursSeg(this)">🗑️</button>
+      </div>`;
+  },
+
+  addHoursSeg() {
+    const wrap = document.getElementById('t_hours_segs');
+    if (!wrap) return;
+    const idx = wrap.children.length;
+    wrap.insertAdjacentHTML('beforeend', this.hoursSegRow(idx, { open: '09:00', close: '22:00' }));
+  },
+
+  removeHoursSeg(btn) {
+    const row = btn.closest && btn.closest('[data-seg]');
+    if (row && row.parentNode) row.parentNode.removeChild(row);
+  },
+
   _commonFields(s) {
     const typeOpts = Object.entries(ITIN_TYPES)
       .map(([k, v]) => `<option value="${k}" ${k === s.type ? 'selected' : ''}>${v.label}</option>`).join('');
     return `
       <div class="form-field col-span-full"><label>名称 <span class="req">*</span></label><input id="t_name" value="${s.name || ''}" placeholder="如：台北101" /></div>
       <div class="form-field"><label>分类</label><select id="t_type">${typeOpts}</select></div>
-      <div class="form-field"><label>建议时长(小时)</label><input type="number" id="t_dur" min="0.5" step="0.5" value="${s.durationH || 1}" /></div>
-      <div class="form-field"><label>营业时间</label><input id="t_hours" value="${s.hours || ''}" placeholder="09:00-22:00" /></div>
+      <div class="form-field"><label>时长(小时)</label><input type="number" id="t_dur" min="0.5" step="0.5" value="${s.durationH || 1}" /></div>
+      <div class="form-field col-span-full">
+        <label>🕒 营业时间（可分段）</label>
+        <div id="t_hours_segs">${this.hoursToSegments(s).map((seg, i) => this.hoursSegRow(i, seg)).join('')}</div>
+        <button type="button" class="btn btn-ghost btn-sm mt-1" onclick="app.modules.itinerary.addHoursSeg()">➕ 添加分段</button>
+        <div class="text-tiny text-slate-500 mt-1">从列表选择每段开始/结束时间（如 14:00~16:00）；未添加分段 = 不限制营业时间。可叠加多段（如午市+晚市）。</div>
+      </div>
       <div class="form-field col-span-full">
         <label>🔗 Google Map 链接</label>
         <div class="flex gap-2">
@@ -712,6 +769,7 @@ app.modules.itinerary = {
     return `
       ${daySel}
       <div class="form-field"><label>开始时间</label><input type="time" id="t_start" value="${s.startTime || '09:00'}" /></div>
+      <div class="form-field"><label>结束时间</label><input type="time" id="t_end" value="${s.endTime || ''}" /></div>
       <div class="form-field"><label>门票(¥)</label><input type="number" id="t_ticket" min="0" value="${s.ticket || 0}" /></div>
       <div class="form-field"><label>是否需预约</label>
         <select id="t_resv">
@@ -802,7 +860,7 @@ app.modules.itinerary = {
         ${sched}
       </div>
     `, [
-      ...(mode === 'spot' && !isNew ? [{ text: '删除', class: 'btn btn-danger', action: `app.modules.itinerary.deleteTrip('${a}','${b}')` }] : []),
+      ...(mode === 'spot' && !isNew ? [{ text: '从表移除', class: 'btn btn-danger', action: `app.modules.itinerary.deleteTrip('${a}','${b}')` }] : []),
       { text: '取消', class: 'btn btn-ghost', action: 'app.closeModal()' },
       { text: '保存', class: 'btn btn-primary', action: `app.modules.itinerary.saveTrip('${mode}','${a}','${b || ''}')` }
     ]);
@@ -815,11 +873,26 @@ app.modules.itinerary = {
       name,
       type: document.getElementById('t_type').value,
       durationH: Math.max(0.5, parseFloat(document.getElementById('t_dur').value) || 1),
-      hours: (document.getElementById('t_hours').value || '').trim(),
+      hours: '',
       mapUrl: (document.getElementById('t_map').value || '').trim(),
       image: (document.getElementById('t_img').value || '').trim(),
       note: (document.getElementById('t_note').value || '').trim()
     };
+    // 营业时间：从分段选择器收集（结构化 hoursSegments + 兼容旧字符串 hours）
+    const _segEls = Array.from(document.querySelectorAll('#t_hours_segs [data-seg]'));
+    const _segs = _segEls
+      .map(el => ({ open: el.querySelector('.t_hours_open').value, close: el.querySelector('.t_hours_close').value }))
+      .filter(g => g.open && g.close);
+    common.hoursSegments = _segs;
+    common.hours = _segs.map(g => `${g.open}-${g.close}`).join('; ');
+    // 结束时间 + 由开始/结束推导时长
+    const _startV = document.getElementById('t_start') ? document.getElementById('t_start').value : '09:00';
+    const _endV = document.getElementById('t_end') ? document.getElementById('t_end').value : '';
+    if (_endV) {
+      const _stN = itinTimeToNum(_startV), _eN = itinTimeToNum(_endV);
+      if (_eN > _stN) common.durationH = Math.round((_eN - _stN) * 100) / 100;
+    }
+    common.endTime = _endV;
     if (mode === 'spot') {
       const d = app.getActiveDestination();
       if (!d) return;
@@ -828,6 +901,7 @@ app.modules.itinerary = {
       if (!day.spots) day.spots = [];
       const sched = {
         startTime: document.getElementById('t_start').value || '09:00',
+        endTime: document.getElementById('t_end') ? document.getElementById('t_end').value : '',
         ticket: parseFloat(document.getElementById('t_ticket').value) || 0,
         reservation: document.getElementById('t_resv').value
       };
@@ -883,6 +957,7 @@ app.modules.itinerary = {
         if (day) {
           const sched = {
             startTime: document.getElementById('t_start').value || '09:00',
+            endTime: document.getElementById('t_end') ? document.getElementById('t_end').value : '',
             ticket: parseFloat(document.getElementById('t_ticket').value) || 0,
             reservation: document.getElementById('t_resv').value
           };
@@ -907,6 +982,8 @@ app.modules.itinerary = {
       name: common.name,
       type: ITIN_KEY_TO_CN[common.type] || '其他',
       durationH: common.durationH,
+      endTime: common.endTime || '',
+      hoursSegments: common.hoursSegments || [],
       hours: common.hours,
       mapUrl: common.mapUrl,
       image: common.image,
@@ -918,6 +995,8 @@ app.modules.itinerary = {
     cand.name = common.name;
     cand.type = ITIN_KEY_TO_CN[common.type] || cand.type;
     cand.durationH = common.durationH;
+    cand.endTime = common.endTime || '';
+    cand.hoursSegments = common.hoursSegments || [];
     cand.hours = common.hours;
     cand.mapUrl = common.mapUrl;
     cand.image = common.image;
@@ -928,6 +1007,7 @@ app.modules.itinerary = {
   propagateCandToSpots(cand, common) {
     const fields = {
       name: common.name, type: common.type, durationH: common.durationH,
+      endTime: common.endTime || '', hoursSegments: common.hoursSegments || [],
       hours: common.hours, mapUrl: common.mapUrl,
       image: common.image, note: common.note
     };
@@ -940,7 +1020,7 @@ app.modules.itinerary = {
   // 已移除「根据地图链接获取地址」功能：地址栏、获取按钮、短链解析与反向地理编码均已删除；地图链接字段保留。
 
   deleteTrip(dayId, spotId) {
-    if (!confirm('确定删除这个行程块？')) return;
+    if (!confirm('确定把这个行程块从行程表移除？（仍保留在「行程库」，可随时重新加入）')) return;
     const d = app.getActiveDestination();
     if (!d) return;
     const day = (app.state[d.id].itinerary || []).find(x => x.id === dayId);
@@ -950,7 +1030,7 @@ app.modules.itinerary = {
     app.saveState();
     app.closeModal();
     app.renderAll();
-    app.toast('已删除', 'success');
+    app.toast('已从行程表移除（行程库保留）', 'success');
   },
 
   /* ===== 修改 日期 / 天气 ===== */
