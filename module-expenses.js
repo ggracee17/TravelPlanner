@@ -63,8 +63,8 @@ app.modules.expenses = {
     // 按分类汇总（以台币计）
     const byCat = {};
     expenses.forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + twdOf(e); });
-    const catLabels = { 交通: '✈️', 住宿: '🏨', 门票: '🎫', 餐饮: '🍽️', 甜品: '🍰', 小吃: '🥟', 购物: '🛍️', 其他杂费: '💼' };
-    const catColors = { 交通: '#0ea5e9', 住宿: '#10b981', 门票: '#8b5cf6', 餐饮: '#f59e0b', 甜品: '#d946ef', 小吃: '#f97316', 购物: '#ec4899', 其他杂费: '#64748b' };
+    const catLabels = { 交通: '✈️', 住宿: '🏨', 门票: '🎫', 娱乐: '🎡', 拍照: '📷', 餐饮: '🍽️', 甜品: '🍰', 小吃: '🥟', 购物: '🛍️', 其他杂费: '💼' };
+    const catColors = { 交通: '#0ea5e9', 住宿: '#10b981', 门票: '#8b5cf6', 娱乐: '#6366f1', 拍照: '#0d9488', 餐饮: '#f59e0b', 甜品: '#d946ef', 小吃: '#f97316', 购物: '#ec4899', 其他杂费: '#64748b' };
 
     // 按日汇总（以台币计）
     const byDay = {};
@@ -273,6 +273,8 @@ app.modules.expenses = {
             <option ${e.category==='交通'?'selected':''}>交通</option>
             <option ${e.category==='住宿'?'selected':''}>住宿</option>
             <option ${e.category==='门票'?'selected':''}>门票</option>
+            <option ${e.category==='娱乐'?'selected':''}>娱乐</option>
+            <option ${e.category==='拍照'?'selected':''}>拍照</option>
             <option ${e.category==='餐饮'?'selected':''}>餐饮</option>
             <option ${e.category==='甜品'?'selected':''}>甜品</option>
             <option ${e.category==='小吃'?'selected':''}>小吃</option>
