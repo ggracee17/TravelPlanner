@@ -221,6 +221,36 @@ app.modules.map = {
     });
   },
 
+  /* 解析单个行程地点坐标：优先地图链接，其次按名称地理编码。
+     返回 'existing'（已有坐标）| 'located'（本次新定位）| 'failed-new'（本次新标记定位失败）| 'skip-failed'（曾失败已跳过）。
+     'located'/'failed-new' 表示本次有写库，调用方据此决定是否 saveState。 */
+  async _resolveItemCoord(it) {
+    const s = it.spot;
+    if (s.lat != null && s.lng != null) return 'existing';            // 已有坐标，跳过
+    // 有地图链接：优先从中解析坐标（免费、位置最准，且不按名称定位，避免同名地点被定位到错误位置）
+    const fromUrl = s.mapUrl ? extractCoordsFromMapUrl(s.mapUrl) : null;
+    if (fromUrl) {
+      s.lat = fromUrl.lat; s.lng = fromUrl.lng;
+      if (it.isCand) { const c = (app.state.candidates || []).find(x => x.id === it.spot.id); if (c) { c.lat = fromUrl.lat; c.lng = fromUrl.lng; } }
+      s._geoFailed = false; s._geoFailQ = '';
+      return 'located';
+    }
+    // 无链接 / 链接无坐标：按名称/地址地理编码（省 Credits 模式跳过，只显示已有/链接坐标的点）
+    if (app.state.ecoMode) { if (!s._geoFailed) s._geoFailed = true; return 'failed-new'; }
+    const q = [s.name, s.address].filter(Boolean).join(' ').trim();
+    if (!q) { if (!s._geoFailed) s._geoFailed = true; return 'failed-new'; }
+    if (s._geoFailed && s._geoFailQ === q) return 'skip-failed';
+    const g = await this.geocodeCached(q);
+    if (g) {
+      s.lat = g.lat; s.lng = g.lng;
+      if (it.isCand) { const c = (app.state.candidates || []).find(x => x.id === it.spot.id); if (c) { c.lat = g.lat; c.lng = g.lng; } }
+      s._geoFailed = false; s._geoFailQ = '';
+      return 'located';
+    }
+    s._geoFailed = true; s._geoFailQ = q;
+    return 'failed-new';
+  },
+
   /* 离线地理编码缓存：持久化到 localStorage，跨刷新/会话复用，进一步省 Google Geocoding 配额 */
   loadGeoCache() {
     this._geoLoaded = true;
@@ -260,24 +290,14 @@ app.modules.map = {
       else if (this._failed) this._noteMapFallback();
       return;
     }
-    // 地理编码缺失坐标（带缓存与失败去重，避免重复消耗配额）
-    // 省 Credits 模式：跳过 Geocoding API 调用，只显示已有坐标的点（坐标来自手动填写或行程链接解析）。
+    // 坐标定位（优先用已填地图链接里解析出的坐标，按名称地理编码作为兜底）：
+    //   - 有坐标 → 跳过；
+    //   - 有地图链接且能解析出坐标 → 直接用链接坐标（免费、最准，且不按名称定位，避免同名地点错位）；
+    //   - 否则仅在非「省 Credits」模式下按名称/地址做 Google 地理编码。
     let needSave = false;
-    if (!app.state.ecoMode) {
-      for (const it of drawItems) {
-        const s = it.spot;
-        if (s.lat != null && s.lng != null) continue;            // 已有坐标，跳过
-        const q = [s.name, s.address].filter(Boolean).join(' ').trim();
-        if (!q) { if (!s._geoFailed) { s._geoFailed = true; needSave = true; } continue; } // 无名称/地址，无法定位
-        if (s._geoFailed && s._geoFailQ === q) continue;          // 同一查询曾失败，本次跳过（省配额）
-        const g = await this.geocodeCached(q);
-        if (g) {
-          s.lat = g.lat; s.lng = g.lng;
-          if (it.isCand) { const c = (app.state.candidates || []).find(x => x.id === it.spot.id); if (c) { c.lat = g.lat; c.lng = g.lng; } } // 候选坐标回写，持久化
-          s._geoFailed = false; s._geoFailQ = ''; needSave = true;
-        }
-        else { s._geoFailed = true; s._geoFailQ = q; needSave = true; } // 失败标记，下次同查询不再调用
-      }
+    for (const it of drawItems) {
+      const st = await this._resolveItemCoord(it);
+      if (st === 'located' || st === 'failed-new') needSave = true;
     }
     if (needSave) app.saveState();
     const withCoord = drawItems.filter(it => it.spot.lat != null && it.spot.lng != null);
