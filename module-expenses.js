@@ -120,7 +120,7 @@ app.modules.expenses = {
                       <td>${b.currency === 'AUD' ? '澳币 (A$)' : '台币 (NT$)'}</td>
                       <td class="font-semibold">${b.currency === 'AUD' ? 'A$' : '¥'}${(parseFloat(b.amount) || 0).toFixed(2)}</td>
                       <td><span class="badge ${b.priceType === 'total' ? 'badge-other' : 'badge-hotel'}">${b.priceType === 'total' ? '总价' : '单人'}</span></td>
-                      <td class="text-slate-600">¥${bTwdOf(b).toFixed(0)}</td>
+                      <td class="text-slate-600">¥${bTwdOf(b).toFixed(0)} <span class="text-tiny text-slate-500">≈ A$${(bTwdOf(b) / rate).toFixed(0)}</span></td>
                       <td>
                         <button class="btn btn-ghost btn-sm" onclick="app.modules.expenses.editBudget('${b.id}')">✏️</button>
                         <button class="btn btn-danger btn-sm" onclick="app.modules.expenses.removeBudget('${b.id}')">🗑️</button>
@@ -131,7 +131,7 @@ app.modules.expenses = {
                 <tfoot>
                   <tr style="background:#f1f5f9;font-weight:600">
                     <td colspan="4" class="text-right">${app.t('expense.budgetTotal')}（台币 · ${travelers} 人）</td>
-                    <td>¥${budget.toFixed(2)} <span class="text-tiny text-slate-500">≈ A$${(budget / rate).toFixed(0)}　·　每人 ¥${(budget / travelers).toFixed(0)}</span></td>
+                    <td>¥${budget.toFixed(2)} <span class="text-tiny text-slate-500">≈ A$${(budget / rate).toFixed(0)}　·　每人 ¥${(budget / travelers).toFixed(0)} ≈ A$${(budget / travelers / rate).toFixed(0)}</span></td>
                     <td></td>
                   </tr>
                 </tfoot>
@@ -145,12 +145,12 @@ app.modules.expenses = {
           <div class="p-4 bg-gradient-to-br from-sky-50 to-sky-100 rounded-lg border border-sky-200">
             <div class="text-xs text-sky-700 font-semibold">💰 总预算（${travelers} 人）</div>
             <div class="text-2xl font-bold text-sky-800">¥${budget.toFixed(0)}</div>
-            <div class="text-xs text-sky-600 mt-0.5">≈ A$${(budget / rate).toFixed(0)}　·　每人 ¥${(budget / travelers).toFixed(0)}</div>
+            <div class="text-xs text-sky-600 mt-0.5">≈ A$${(budget / rate).toFixed(0)}　·　每人 ¥${(budget / travelers).toFixed(0)} ≈ A$${(budget / travelers / rate).toFixed(0)}</div>
           </div>
           <div class="p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg border border-orange-200">
             <div class="text-xs text-orange-700 font-semibold">📊 已支出（${travelers} 人）</div>
             <div class="text-2xl font-bold text-orange-800">¥${total.toFixed(0)}</div>
-            <div class="text-xs text-orange-600 mt-0.5">每人 ¥${(total / travelers).toFixed(0)}</div>
+            <div class="text-xs text-orange-600 mt-0.5">每人 ¥${(total / travelers).toFixed(0)} ≈ A$${(total / travelers / rate).toFixed(0)}</div>
           </div>
           <div class="p-4 rounded-lg border" style="${remaining >= 0 ? 'background:#ecfdf5;border-color:#a7f3d0;' : 'background:#fef2f2;border-color:#fecaca;'}">
             <div class="text-xs font-semibold" style="color:${remaining >= 0 ? '#047857' : '#b91c1c'}">${remaining >= 0 ? '💵 剩余预算' : '⚠️ 超支金额'}</div>
@@ -202,7 +202,7 @@ app.modules.expenses = {
                     <td class="text-tiny">${e.date || '-'}</td>
                     <td>${catLabels[e.category] || ''} ${e.category}</td>
                     <td>${e.detail || '-'}${e.merchant ? ` <span class="text-tiny text-slate-500">· ${e.merchant}</span>` : ''}</td>
-                    <td class="font-semibold">${e.currency === 'AUD' ? 'A$' : '¥'}${(parseFloat(e.amount) || 0).toFixed(2)}${e.currency === 'AUD' ? ` <span class="text-tiny text-slate-500">· ≈ 台币 ¥${twdOf(e).toFixed(0)}</span>` : ''}</td>
+                    <td class="font-semibold">${e.currency === 'AUD' ? 'A$' : '¥'}${(parseFloat(e.amount) || 0).toFixed(2)}<div class="text-tiny text-slate-500 font-normal mt-0.5">总额 ¥${twdOf(e).toFixed(0)} · ≈ A$${(twdOf(e) / rate).toFixed(0)}</div></td>
                     <td><span class="badge ${e.priceType === 'total' ? 'badge-other' : 'badge-hotel'}">${e.priceType === 'total' ? '总价' : '单人'}</span></td>
                     <td class="text-tiny">${e.paidBy || '-'}</td>
                     <td class="text-tiny">${e.payment || '-'}</td>
@@ -263,8 +263,16 @@ app.modules.expenses = {
           </select>
         </div>
         <div class="form-field col-span-full">
-          <label>消费详情 <span class="req">*</span></label>
-          <input id="e_detail" value="${e.detail || ''}" placeholder="如：东京塔门票 / 京都到大阪新干线" />
+          <div style="display:flex; gap:0.75rem; align-items:flex-start;">
+            <div style="flex:1;">
+              <label>消费详情 <span class="req">*</span></label>
+              <input id="e_detail" value="${e.detail || ''}" placeholder="如：东京塔门票 / 京都到大阪新干线" />
+            </div>
+            <div style="width:12rem;">
+              <label>商家名称</label>
+              <input id="e_merchant" value="${e.merchant || ''}" placeholder="如：7-11 / 全家 / 高岛屋" />
+            </div>
+          </div>
         </div>
         <div class="form-field">
           <label>消费货币 <span class="req">*</span></label>
@@ -296,10 +304,6 @@ app.modules.expenses = {
             <option value="per" ${e.priceType !== 'total' ? 'selected' : ''}>单人价格（× 本次旅行人数）</option>
             <option value="total" ${e.priceType === 'total' ? 'selected' : ''}>总价（已含全部人）</option>
           </select>
-        </div>
-        <div class="form-field">
-          <label>商家名称</label>
-          <input id="e_merchant" value="${e.merchant || ''}" placeholder="如：7-11 / 全家 / 高岛屋" />
         </div>
         <div class="form-field">
           <label>谁付的款</label>
