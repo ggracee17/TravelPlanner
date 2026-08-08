@@ -671,10 +671,37 @@ app.modules.itinerary = {
       <div class="form-field"><label>分类</label><select id="t_type">${typeOpts}</select></div>
       <div class="form-field"><label>建议时长(小时)</label><input type="number" id="t_dur" min="0.5" step="0.5" value="${s.durationH || 1}" /></div>
       <div class="form-field"><label>营业时间</label><input id="t_hours" value="${s.hours || ''}" placeholder="09:00-22:00" /></div>
-      <div class="form-field col-span-full"><label>🔗 Google Map 链接</label><input id="t_map" value="${s.mapUrl || ''}" placeholder="https://www.google.com/maps/place/.../@25.03,121.56,15z" /></div>
+      <div class="form-field col-span-full">
+        <label>🔗 Google Map 链接</label>
+        <div class="flex gap-2">
+          <input id="t_map" class="flex-1" value="${s.mapUrl || ''}" placeholder="https://www.google.com/maps/place/.../@25.03,121.56,15z" />
+          <button type="button" class="btn btn-ghost" style="white-space:nowrap" onclick="app.modules.itinerary.openMapLink('${s.lat != null ? s.lat : ''}','${s.lng != null ? s.lng : ''}')">🌐 打开</button>
+        </div>
+        <div class="text-tiny text-slate-500 mt-1">填好链接或经纬度后，点「打开」可直接跳转到 Google Maps（链接留空时按经纬度或名称搜索）</div>
+      </div>
       <div class="form-field col-span-full"><label>🖼️ 图片链接 (URL)</label><input id="t_img" value="${s.image || ''}" placeholder="https://.../photo.jpg" /></div>
       <div class="form-field col-span-full"><label>📝 备注</label><textarea id="t_note" rows="2">${s.note || ''}</textarea></div>
     `;
+  },
+
+  /* 在编辑行程块/行程库时，直接跳转到 Google Maps。
+     优先级：① 已填的地图链接；② 已存经纬度拼坐标 URL；③ 用名称搜索。 */
+  openMapLink(lat, lng) {
+    const mapEl = document.getElementById('t_map');
+    const url = (mapEl && mapEl.value || '').trim();
+    if (url) { window.open(url, '_blank', 'noopener'); return; }
+    const la = parseFloat(lat), ln = parseFloat(lng);
+    if (!isNaN(la) && !isNaN(ln)) {
+      window.open(`https://www.google.com/maps/@${la},${ln},15z`, '_blank', 'noopener');
+      return;
+    }
+    const nameEl = document.getElementById('t_name');
+    const name = (nameEl && nameEl.value || '').trim();
+    if (name) {
+      window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(name), '_blank', 'noopener');
+      return;
+    }
+    app.toast('请先填写 Google Map 链接、经纬度或名称', 'warning');
   },
 
   _schedFields(s, opts) {
