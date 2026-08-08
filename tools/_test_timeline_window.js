@@ -40,34 +40,37 @@ function assert(cond, msg) {
 const { app, ctx } = makeClient();
 const itin = app.modules.itinerary;
 
-console.log('\n[测试A] 早于 06:00 的行程块：时间轴窗口不再钳到 6:00');
+console.log('\n[测试A] 时间轴固定 06:00–24:00（每天等长，早于 6 点的行程不画在行程表）');
 {
   const earlySpot = { id: 'sp1', name: 'Hotel', type: 'hotel', startTime: '00:10', endTime: '12:10', durationH: 12, ticket: 0, reservation: '', hoursSegments: [] };
   const day = { id: 'd1', spots: [earlySpot] };
 
   const wCollapsed = itin.dayWindow(day, false);
-  assert(wCollapsed.start === 0, '折叠模式：窗口起点应为 0（含 00:10），而非 6');
-  assert(wCollapsed.end >= 13, '折叠模式：窗口终点应覆盖到块结束之后');
-
+  assert(wCollapsed.start === 6 && wCollapsed.end === 24, '折叠：窗口固定 6–24（不再起点 0）');
   const wExpanded = itin.dayWindow(day, true);
-  assert(wExpanded.start === 0, '展开模式：窗口起点应为 0（含 00:10），而非 6');
+  assert(wExpanded.start === 6 && wExpanded.end === 24, '展开：窗口固定 6–24');
 
-  // 位置计算：top 应反映真实时间（00:10 → 约 8px），而不是被钳到 0（即 6:00 处）
-  const html = itin.renderBlock(earlySpot, day, wCollapsed, null);
-  const m = html.match(/top:([\d.]+)px/);
-  const top = m ? parseFloat(m[1]) : -1;
-  assert(top > 0 && top < 48, `00:10 块 top≈8px（top=${top}），未被钳到 6:00 位置`);
-  assert(html.includes('00:10') && html.includes('12:10'), '块标签显示真实时间 00:10–12:10（而非 6:00–18:00）');
+  // 空日程也保持同样长度
+  const empty = itin.dayWindow({ id: 'd0', spots: [] }, false);
+  assert(empty.start === 6 && empty.end === 24, '空日程：窗口仍为 6–24（每天等长）');
 }
 
-console.log('\n[测试B] 普通白天行程：行为不变（窗口仍为实际段，展开仍 6–24）');
+console.log('\n[测试B] 6 点前行程不在行程表渲染；白天行程正常；每天时间轴等高');
 {
-  const daySpot = { id: 'sp2', name: 'Museum', type: 'spot', startTime: '09:00', durationH: 2, ticket: 0, reservation: '', hoursSegments: [] };
-  const day = { id: 'd2', spots: [daySpot] };
-  const wC = itin.dayWindow(day, false);
-  assert(wC.start === 9 && wC.end === 11, '折叠：窗口为 9–11（与修复前一致）');
-  const wE = itin.dayWindow(day, true);
-  assert(wE.start === 6 && wE.end === 24, '展开：窗口为 6–24（与修复前一致）');
+  const early = { id: 'sp1', name: 'RedEye', type: 'spot', startTime: '00:10', durationH: 1, ticket: 0, reservation: '', hoursSegments: [] };
+  const mid = { id: 'sp2', name: 'Museum', type: 'spot', startTime: '09:00', durationH: 2, ticket: 0, reservation: '', hoursSegments: [] };
+  const day = { id: 'd2', date: '2026-08-09', spots: [early, mid] };
+
+  const html = itin.renderDayColumn(day, 0, { id: 'x' }, false);
+  assert(html.includes('sp2'), '白天行程(09:00) 仍渲染在行程表');
+  assert(!html.includes('sp1'), '6 点前行程(00:10) 不渲染在行程表');
+
+  // 等高：只有凌晨行程的天 vs 只有白天行程的天，时间轴高度一致（均为 18h）
+  const htmlEarlyOnly = itin.renderDayColumn({ id: 'dE', date: '2026-08-09', spots: [early] }, 0, { id: 'x' }, false);
+  const htmlNormal = itin.renderDayColumn({ id: 'dN', date: '2026-08-09', spots: [mid] }, 0, { id: 'x' }, false);
+  const hE = parseFloat((htmlEarlyOnly.match(/height:([\d.]+)px/) || [])[1] || '-1');
+  const hN = parseFloat((htmlNormal.match(/height:([\d.]+)px/) || [])[1] || '-1');
+  assert(hE > 0 && hE === hN, `每天时间轴等高（early=${hE}, normal=${hN}）`);
 }
 
 console.log('\n[测试C] 时间菜单 24 小时制');
@@ -81,6 +84,20 @@ console.log('\n[测试C] 时间菜单 24 小时制');
   assert(/<option value="09:00" selected/.test(opts30) && /<option value="09:30"/.test(opts30) && !/09:10/.test(opts30), '默认 30 分钟档（营业时间）保持，且不含 09:10');
   // itinTimeToNum 解析 24 小时串
   assert(Math.abs(ctx.itinTimeToNum('00:10') - (1/6)) < 1e-6, 'itinTimeToNum("00:10") = 1/6 小时');
+}
+
+console.log('\n[测试D] 固定休息日：行程排在休息日提示「今日休」');
+{
+  const win = { start: 6, end: 24 };
+  const sunday = { id: 'dSun', date: '2026-08-09' }; // 周日
+  const monday = { id: 'dMon', date: '2026-08-10' }; // 周一
+  const closedSun = { id: 'sp', name: '店', type: 'spot', startTime: '10:00', durationH: 2, hoursSegments: [], closedDays: [0] };
+  const htmlSun = itin.renderBlock(closedSun, sunday, win, null);
+  assert(htmlSun.includes('今日休'), '周日且 closedDays 含周日(0) → 提示「今日休」');
+  const htmlMon = itin.renderBlock(closedSun, monday, win, null);
+  assert(!htmlMon.includes('今日休'), '周一（非休息日）→ 不提示「今日休」');
+  const noClosed = itin.renderBlock({ id: 'sp2', name: '店2', type: 'spot', startTime: '10:00', durationH: 2, hoursSegments: [] }, sunday, win, null);
+  assert(!noClosed.includes('今日休'), '无 closedDays → 不提示「今日休」');
 }
 
 console.log(`\n========== 结果: ${passed} 通过, ${failed} 失败 ==========`);

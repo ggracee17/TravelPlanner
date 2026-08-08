@@ -383,6 +383,27 @@ table.data-table tr:hover td { background: #f8fafc; }
   pointer-events: none;
 }
 
+/* 周选择小药丸（固定休息日等） */
+.chk-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+.chk-pill:has(input:checked) {
+  border-color: #ef4444;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-weight: 600;
+}
+.chk-pill input { accent-color: #ef4444; }
+
 /* ===== 搜索结果卡 ===== */
 .search-result {
   background: white;

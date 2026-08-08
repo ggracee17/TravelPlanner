@@ -75,6 +75,13 @@ function itinWeekdayLabel(dateStr) {
   if (isNaN(dt.getTime())) return '';
   return '周' + '日一二三四五六'[dt.getDay()];
 }
+function itinWeekdayIndex(dateStr) {
+  if (!dateStr || !/^\d{4}-\d{1,2}-\d{1,2}$/.test(dateStr)) return null;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  if (isNaN(dt.getTime())) return null;
+  return dt.getDay(); // 0=周日 … 6=周六
+}
 
 app.modules.itinerary = {
 
@@ -154,35 +161,19 @@ app.modules.itinerary = {
     this.render();
   },
 
-  /* 计算某天时间轴的可见窗口（折叠=仅行程段；展开=尽量覆盖 06:00–24:00，但行程更早/更晚时自动扩到实际范围）
-     关键修复：窗口起点允许早于 06:00（如凌晨行程），否则早于 6 点的行程块会被错误钳制到 6:00 位置，
-     导致「12:10am 的行程」显示成 6:00 起、12h 高度到 18:00 的错位。 */
+  /* 时间轴固定显示 06:00–24:00：每天等长，且早于 6 点的行程不画在行程表上（保持各天长度一致）。
+     注：此前为支持凌晨行程曾允许窗口起点 < 6，现已按需求改回固定窗口。 */
   dayWindow(day, expanded) {
-    const spots = day.spots || [];
-    let mn = ITIN_TL_END, mx = ITIN_TL_START;
-    spots.forEach(s => {
-      const st = itinTimeToNum(s.startTime);
-      const en = st + (parseFloat(s.durationH) || 1);
-      if (st < mn) mn = st;
-      if (en > mx) mx = en;
-    });
-    if (expanded) {
-      const ws = Math.min(ITIN_TL_START, Math.floor(mn));
-      const we = Math.min(24, Math.max(ITIN_TL_END, Math.ceil(mx)));
-      return { start: Math.max(0, ws), end: we };
-    }
-    if (!spots.length) return { start: 9, end: 11 }; // 空日程：给一小段便于拖入
-    const ws = Math.max(0, Math.floor(mn));
-    const we = Math.min(24, Math.ceil(mx));
-    if (we <= ws) return { start: ws, end: ws + 1 };
-    return { start: ws, end: we };
+    return { start: ITIN_TL_START, end: ITIN_TL_END };
   },
 
   renderDayColumn(day, idx, dest, expanded) {
     this.normalizeDay(day);
     const win = this.dayWindow(day, expanded);
     const hpx = itinHourPx();
-    const spots = day.spots || [];
+    const allSpots = day.spots || [];
+    // 6 点以前的行程不画在行程表上（保持每天长度一致）
+    const spots = allSpots.filter(s => itinTimeToNum(s.startTime) >= ITIN_TL_START);
     const laneMap = this.computeLanes(spots);
     const totalTicket = spots.reduce((s, x) => s + (parseFloat(x.ticket) || 0), 0);
     const hours = [];
@@ -241,12 +232,16 @@ app.modules.itinerary = {
     const leftStyle = `calc(${LP}px + (100% - ${LP + RP}px) * ${lane} / ${lanes})`;
     const widthStyle = `calc((100% - ${LP + RP}px) / ${lanes} - ${GAP}px)`;
     // 开始时间不在营业时间内的提示
-    const warn = this.outsideHours(s.startTime, dur, s.hoursSegments || s.hours);
+    const timeWarn = this.outsideHours(s.startTime, dur, s.hoursSegments || s.hours);
+    const wd = itinWeekdayIndex(day.date);
+    const closedWarn = (wd != null && Array.isArray(s.closedDays) && s.closedDays.includes(wd)) ? `今日为固定休息日（${itinWeekdayLabel(day.date)}）` : '';
+    const warn = timeWarn || closedWarn;
     let flags = '';
     if (!isShort) {
       if (s.reservation === 'needed') flags += '<span class="tl-flag">需预约</span>';
       if (s.ticket > 0) flags += `<span class="tl-flag tl-flag-ticket">¥${s.ticket}</span>`;
-      if (warn) flags += `<span class="tl-flag tl-flag-warn" title="${warn}">⚠️ 非营业</span>`;
+      if (timeWarn) flags += `<span class="tl-flag tl-flag-warn" title="${timeWarn}">⚠️ 非营业</span>`;
+      if (closedWarn) flags += `<span class="tl-flag tl-flag-warn" title="${closedWarn}">⚠️ 今日休</span>`;
     }
     const cls = `tl-block ${meta.cls}${isShort ? ' tl-short' : ''}${isXShort ? ' tl-xshort' : ''}`;
     const title = `点击编辑 · 拖动改时间${warn ? ' · ' + warn : ''}`;
@@ -754,6 +749,8 @@ app.modules.itinerary = {
   _commonFields(s) {
     const typeOpts = Object.entries(ITIN_TYPES)
       .map(([k, v]) => `<option value="${k}" ${k === s.type ? 'selected' : ''}>${v.label}</option>`).join('');
+    const WD = [['周一',1],['周二',2],['周三',3],['周四',4],['周五',5],['周六',6],['周日',0]];
+    const closed = Array.isArray(s.closedDays) ? s.closedDays : [];
     return `
       <div class="form-field col-span-full"><label>名称 <span class="req">*</span></label><input id="t_name" value="${s.name || ''}" placeholder="如：台北101" /></div>
       <div class="form-field"><label>分类</label><select id="t_type">${typeOpts}</select></div>
@@ -763,6 +760,13 @@ app.modules.itinerary = {
         <div id="t_hours_segs">${this.hoursToSegments(s).map((seg, i) => this.hoursSegRow(i, seg)).join('')}</div>
         <button type="button" class="btn btn-ghost btn-sm mt-1" onclick="app.modules.itinerary.addHoursSeg()">➕ 添加分段</button>
         <div class="text-tiny text-slate-500 mt-1">从列表选择每段开始/结束时间（如 14:00~16:00）；未添加分段 = 不限制营业时间。可叠加多段（如午市+晚市）。</div>
+      </div>
+      <div class="form-field col-span-full">
+        <label>🚫 固定休息日（每周不营业的星期）</label>
+        <div id="t_closed" class="flex flex-wrap gap-2">
+          ${WD.map(([label, wd]) => `<label class="chk-pill"><input type="checkbox" data-wd="${wd}" ${closed.includes(wd) ? 'checked' : ''}/> ${label}</label>`).join('')}
+        </div>
+        <div class="text-tiny text-slate-500 mt-1">勾选该地点每周几固定休息（如周一）。若把行程排在休息日，时间轴上会提示「今日休」。</div>
       </div>
       <div class="form-field col-span-full">
         <label>🔗 Google Map 链接</label>
@@ -956,10 +960,11 @@ app.modules.itinerary = {
             name: cand.name, type: CN_TO_ITIN_KEY[cand.type] || 'other',
             startTime: placed ? placed.startTime : '09:00',
             durationH: cand.durationH || 2, ticket: placed ? placed.ticket : 0, reservation: placed ? placed.reservation : '',
-            address: cand.address || '', hours: cand.hours || '', mapUrl: cand.mapUrl || '', image: cand.image || '', note: cand.note || ''
+            address: cand.address || '', hours: cand.hours || '', mapUrl: cand.mapUrl || '', image: cand.image || '', note: cand.note || '',
+            closedDays: Array.isArray(cand.closedDays) ? cand.closedDays : []
           };
         } else {
-          s = { name: '', type: 'spot', startTime: '09:00', durationH: 2, ticket: 0, reservation: '', address: '', hours: '', mapUrl: '', image: '', note: '' };
+          s = { name: '', type: 'spot', startTime: '09:00', durationH: 2, ticket: 0, reservation: '', address: '', hours: '', mapUrl: '', image: '', note: '', closedDays: [] };
         }
       } else {
         // 无目的地时仍允许编辑行程库（仅不提供加入日期）
@@ -1032,6 +1037,9 @@ app.modules.itinerary = {
       .filter(g => g.open && g.close);
     common.hoursSegments = _segs;
     common.hours = _segs.map(g => `${g.open}-${g.close}`).join('; ');
+    // 固定休息日：收集勾选的星期（data-wd = getDay() 值，0=周日…6=周六）
+    const _closedEls = Array.from(document.querySelectorAll('#t_closed input[type=checkbox]'));
+    common.closedDays = _closedEls.filter(el => el.checked).map(el => parseInt(el.dataset.wd, 10)).sort((a, b) => a - b);
     // 结束时间 + 由开始/结束推导时长
     const _startV = document.getElementById('t_start') ? document.getElementById('t_start').value : '09:00';
     const _endV = document.getElementById('t_end') ? document.getElementById('t_end').value : '';
@@ -1133,7 +1141,8 @@ app.modules.itinerary = {
       hours: s.hours || '',
       mapUrl: s.mapUrl || '',
       image: s.image || '',
-      note: s.note || ''
+      note: s.note || '',
+      closedDays: Array.isArray(s.closedDays) ? s.closedDays : []
     };
   },
 
@@ -1148,7 +1157,8 @@ app.modules.itinerary = {
       hours: common.hours,
       mapUrl: common.mapUrl,
       image: common.image,
-      note: common.note
+      note: common.note,
+      closedDays: Array.isArray(common.closedDays) ? common.closedDays : []
     };
   },
 
@@ -1162,6 +1172,7 @@ app.modules.itinerary = {
     cand.mapUrl = common.mapUrl;
     cand.image = common.image;
     cand.note = common.note;
+    cand.closedDays = Array.isArray(common.closedDays) ? common.closedDays : [];
   },
 
   // 把行程库项目改动同步到所有关联行程块（按 sourceId 跨目的地）
@@ -1170,7 +1181,8 @@ app.modules.itinerary = {
       name: common.name, type: common.type, durationH: common.durationH,
       endTime: common.endTime || '', hoursSegments: common.hoursSegments || [],
       hours: common.hours, mapUrl: common.mapUrl,
-      image: common.image, note: common.note
+      image: common.image, note: common.note,
+      closedDays: Array.isArray(common.closedDays) ? common.closedDays : []
     };
     (app.state.destinations || []).forEach(dest => {
       const list = app.state[dest.id]?.itinerary || [];
