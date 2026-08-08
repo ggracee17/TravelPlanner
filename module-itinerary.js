@@ -147,11 +147,11 @@ app.modules.itinerary = {
     this.render();
   },
 
-  /* 计算某天时间轴的可见窗口（折叠=仅行程段；展开=06:00–24:00） */
+  /* 计算某天时间轴的可见窗口（折叠=仅行程段；展开=尽量覆盖 06:00–24:00，但行程更早/更晚时自动扩到实际范围）
+     关键修复：窗口起点允许早于 06:00（如凌晨行程），否则早于 6 点的行程块会被错误钳制到 6:00 位置，
+     导致「12:10am 的行程」显示成 6:00 起、12h 高度到 18:00 的错位。 */
   dayWindow(day, expanded) {
-    if (expanded) return { start: ITIN_TL_START, end: ITIN_TL_END };
     const spots = day.spots || [];
-    if (!spots.length) return { start: 9, end: 11 }; // 空日程：给一小段便于拖入
     let mn = ITIN_TL_END, mx = ITIN_TL_START;
     spots.forEach(s => {
       const st = itinTimeToNum(s.startTime);
@@ -159,9 +159,15 @@ app.modules.itinerary = {
       if (st < mn) mn = st;
       if (en > mx) mx = en;
     });
-    let ws = Math.max(ITIN_TL_START, Math.floor(mn));
-    let we = Math.min(ITIN_TL_END, Math.ceil(mx));
-    if (we <= ws) we = ws + 1;
+    if (expanded) {
+      const ws = Math.min(ITIN_TL_START, Math.floor(mn));
+      const we = Math.min(24, Math.max(ITIN_TL_END, Math.ceil(mx)));
+      return { start: Math.max(0, ws), end: we };
+    }
+    if (!spots.length) return { start: 9, end: 11 }; // 空日程：给一小段便于拖入
+    const ws = Math.max(0, Math.floor(mn));
+    const we = Math.min(24, Math.ceil(mx));
+    if (we <= ws) return { start: ws, end: ws + 1 };
     return { start: ws, end: we };
   },
 
@@ -337,10 +343,13 @@ app.modules.itinerary = {
       e.dataTransfer.setDragImage(blank, 0, 0);
     } catch (_) {}
 
-    // 拖拽时展开所有时间轴，便于看到全部可放置区域
+    // 拖拽时展开所有时间轴，便于看到全部可放置区域（按各天真实窗口，含早于 06:00 的行程）
     const hpx = itinHourPx();
+    const allDays = app.state[d.id]?.itinerary || [];
     document.querySelectorAll('[data-section=itinerary] .timeline').forEach(tl => {
-      const ws = ITIN_TL_START, we = ITIN_TL_END;
+      const day = allDays.find(x => x.id === tl.dataset.dayId);
+      const win = day ? this.dayWindow(day, true) : { start: ITIN_TL_START, end: ITIN_TL_END };
+      const ws = win.start, we = win.end;
       tl.dataset.winStart = ws; tl.dataset.winEnd = we;
       tl.style.height = ((we - ws) * hpx) + 'px';
       const hb = tl.querySelector('.tl-hours');
@@ -646,10 +655,10 @@ app.modules.itinerary = {
     const ends = (day.spots || []).map(s => itinTimeToNum(s.startTime) + (parseFloat(s.durationH) || 1));
     let start = ends.length ? Math.max.apply(null, ends) : 9;
     start = itinSnap(start);
-    const minS = ITIN_TL_START;
+    const minS = 0;
     const maxS = ITIN_TL_END - (parseFloat(durH) || 1);
     if (start < minS) start = minS;
-    if (start > maxS) start = minS; // 溢出则回到早晨
+    if (start > maxS) start = minS; // 溢出则回到凌晨
     return itinNumToTime(start);
   },
 
@@ -676,12 +685,15 @@ app.modules.itinerary = {
            'cand' 编辑行程库项目 (a=candId)
            'newcand' 新增行程库项目
      ============================================================ */
-  /* 生成 00:00–23:30（30 分钟一档）的时间下拉选项 */
-  itinTimeOptions(sel) {
+  /* 生成 00:00–23:59 的 24 小时制时间下拉选项（step 分钟一档，默认 30） */
+  itinTimeOptions(sel, step) {
+    step = step || 30;
     let o = '';
-    for (let h = 0; h < 24; h++) for (const m of [0, 30]) {
-      const v = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
-      o += `<option value="${v}" ${v === sel ? 'selected' : ''}>${v}</option>`;
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += step) {
+        const v = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+        o += `<option value="${v}" ${v === sel ? 'selected' : ''}>${v}</option>`;
+      }
     }
     return o;
   },
@@ -780,8 +792,8 @@ app.modules.itinerary = {
       : '';
     return `
       ${daySel}
-      <div class="form-field"><label>开始时间</label><input type="time" id="t_start" value="${s.startTime || '09:00'}" /></div>
-      <div class="form-field"><label>结束时间</label><input type="time" id="t_end" value="${s.endTime || ''}" /></div>
+      <div class="form-field"><label>开始时间（24 小时制）</label><select id="t_start">${this.itinTimeOptions(s.startTime || '09:00', 5)}</select></div>
+      <div class="form-field"><label>结束时间（24 小时制）</label><select id="t_end">${this.itinTimeOptions(s.endTime || '', 5)}</select></div>
       <div class="form-field"><label>门票(¥)</label><input type="number" id="t_ticket" min="0" value="${s.ticket || 0}" /></div>
       <div class="form-field"><label>是否需预约</label>
         <select id="t_resv">
