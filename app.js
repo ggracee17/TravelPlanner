@@ -638,26 +638,44 @@ const app = {
     return this.state.destinations.find(d => d.id === this.state.activeDestinationId) || null;
   },
 
-  /* ====== 工具：花销总额（单项金额 × 人数 后按货币折算台币） ====== */
+  /* ====== 工具：花销总额 ======
+     计价模型（与预算一致）：每条记录有 priceType
+       - 'total' = 总价（已含全部人），不再乘人数；
+       - 'per'   = 单人价格 × 本次旅行人数 d.travelers；
+       - 旧数据无 priceType 时回落原 people 乘数（向后兼容）。
+     单项金额先按货币折算台币，再乘对应人数。 */
   getExpensesTotal(destId) {
+    const d = this.state.destinations.find(x => x.id === destId);
+    if (!d) return 0;
     const list = this.state[destId]?.expenses || [];
-    const rate = parseFloat(this.state[destId]?.audToTwd) || 21;
+    const rate = parseFloat(d.audToTwd) || 21;
+    const travelers = Math.max(1, parseFloat(d.travelers) || 1);
     return list.reduce((s, e) => {
       const unit = (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
-      return s + unit * (parseFloat(e.people) || 1);
+      let mult;
+      if (e.priceType === 'total') mult = 1;
+      else if (e.priceType === undefined) mult = (parseFloat(e.people) || 1);
+      else mult = travelers;
+      return s + unit * mult;
     }, 0);
   },
 
-  /* ====== 工具：预算总额（逐项预算：单项金额 × 人数 折算台币；无逐项时回落整体预算 d.budget） ====== */
+  /* ====== 工具：预算总额（逐项预算；无逐项时回落整体预算 d.budget） ======
+     计价模型同上：priceType('total'|'per') × 旅行人数 d.travelers；旧数据回落 people。 */
   getBudgetTotal(destId) {
     const d = this.state.destinations.find(x => x.id === destId);
     if (!d) return 0;
     const items = this.state[destId]?.budgets || [];
     if (items.length > 0) {
       const rate = parseFloat(d.audToTwd) || 21;
+      const travelers = Math.max(1, parseFloat(d.travelers) || 1);
       return items.reduce((s, b) => {
         const unit = (b.currency === 'AUD' ? (parseFloat(b.amount) || 0) * rate : (parseFloat(b.amount) || 0));
-        return s + unit * (parseFloat(b.people) || 1);
+        let mult;
+        if (b.priceType === 'total') mult = 1;
+        else if (b.priceType === undefined) mult = (parseFloat(b.people) || 1);
+        else mult = travelers;
+        return s + unit * mult;
       }, 0);
     }
     return parseFloat(d.budget) || 0;

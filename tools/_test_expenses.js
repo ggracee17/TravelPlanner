@@ -85,16 +85,16 @@ console.log('\n[测试B] 澳币/台币换算 getExpensesTotal');
   ];
   assert(Math.abs(app.getExpensesTotal('d1') - 2600) < 1e-6, '默认汇率(21)：A$100 + ¥500 = ¥2600');
 
-  // 改汇率 20：A$100 → 2000
-  app.state.d1.audToTwd = 20;
+  // 改汇率 20：A$100 → 2000（汇率是目的地级属性，写在 destinations[0].audToTwd）
+  app.state.destinations[0].audToTwd = 20;
   assert(Math.abs(app.getExpensesTotal('d1') - 2500) < 1e-6, '汇率改 20：A$100 + ¥500 = ¥2500');
 
   // 纯台币：汇率无关
   app.state.d1.expenses = [{ id: 'e4', currency: 'TWD', amount: 1234 }];
   assert(Math.abs(app.getExpensesTotal('d1') - 1234) < 1e-6, '纯台币：汇率不影响结果');
 
-  // 缺 audToTwd：回落默认 21
-  delete app.state.d1.audToTwd;
+  // 缺 audToTwd：回落默认 21（删掉目的地级属性）
+  delete app.state.destinations[0].audToTwd;
   app.state.d1.expenses = [{ id: 'e5', currency: 'AUD', amount: 10 }];
   assert(Math.abs(app.getExpensesTotal('d1') - 210) < 1e-6, '缺 audToTwd 回落默认 21：A$10 = ¥210');
 }
