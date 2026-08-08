@@ -653,7 +653,8 @@ const app = {
     return list.reduce((s, e) => {
       const unit = (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
       let mult;
-      if (e.priceType === 'total') mult = 1;
+      if (e.single) mult = 1;
+      else if (e.priceType === 'total') mult = 1;
       else if (e.priceType === undefined) mult = (parseFloat(e.people) || 1);
       else mult = travelers;
       return s + unit * mult;

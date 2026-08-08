@@ -309,7 +309,9 @@ app.modules.itinerary = {
     if (!segs || !segs.length) return null;
     const st = itinTimeToNum(start), en = st + (parseFloat(dur) || 1);
     const inAny = segs.some(g => {
-      const o = itinTimeToNum(g.open), c = itinTimeToNum(g.close);
+      const o = itinTimeToNum(g.open), cRaw = itinTimeToNum(g.close);
+      // 00:00 表示营业到午夜，需视为 24:00（cRaw<=o 说明跨越午夜，整段 +24）
+      const c = cRaw <= o + 1e-6 ? cRaw + 24 : cRaw;
       return st >= o - 1e-6 && en <= c + 1e-6;
     });
     if (inAny) return null;

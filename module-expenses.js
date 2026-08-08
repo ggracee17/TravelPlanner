@@ -27,9 +27,10 @@ app.modules.expenses = {
     const rate = parseFloat(d.audToTwd) || 21;   // 1 澳币 = ? 台币
     const travelers = Math.max(1, parseFloat(d.travelers) || 1);          // 本次旅行人数
     const tripPeople = (Array.isArray(d.tripPeople) && d.tripPeople.length) ? d.tripPeople : ['我'];
-    // 计价：total=总价；per=单人价格×旅行人数；旧数据无 priceType 回落原 people
+    // 计价：single=仅我一人（不按人数翻倍）；total=总价；per=单人价格×旅行人数；旧数据无 priceType 回落原 people
     const twdOf = (e) => {
       const unit = (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
+      if (e.single) return unit; // 仅我一人：不乘旅行人数
       if (e.priceType === 'total') return unit;
       const mult = (e.priceType === undefined) ? (parseFloat(e.people) || 1) : travelers;
       return unit * mult;
@@ -212,7 +213,7 @@ app.modules.expenses = {
                     <td>${catLabels[e.category] || ''} ${e.category}</td>
                     <td>${e.detail || '-'}${e.merchant ? ` <span class="text-tiny text-slate-500">· ${e.merchant}</span>` : ''}</td>
                     <td class="font-semibold">${e.currency === 'AUD' ? 'A$' : '¥'}${(parseFloat(e.amount) || 0).toFixed(2)}<div class="text-tiny text-slate-500 font-normal mt-0.5">总额 ¥${twdOf(e).toFixed(0)} · ≈ A$${(twdOf(e) / rate).toFixed(0)}</div></td>
-                    <td><span class="badge ${e.priceType === 'total' ? 'badge-other' : 'badge-hotel'}">${e.priceType === 'total' ? '总价' : '单人'}</span></td>
+                    <td><span class="badge ${e.single ? 'badge-shop' : e.priceType === 'total' ? 'badge-other' : 'badge-hotel'}">${e.single ? '仅我' : e.priceType === 'total' ? '总价' : '单人'}</span></td>
                     <td class="text-tiny">${e.paidBy || '-'}</td>
                     <td class="text-tiny">${e.payment || '-'}</td>
                     <td>
@@ -314,6 +315,12 @@ app.modules.expenses = {
             <option value="total" ${e.priceType === 'total' ? 'selected' : ''}>总价（已含全部人）</option>
           </select>
         </div>
+        <div class="form-field col-span-full">
+          <label style="display:flex;align-items:center;gap:0.5rem;font-weight:400;text-transform:none;color:#334155;cursor:pointer;">
+            <input type="checkbox" id="e_single" ${e.single ? 'checked' : ''} />
+            🙋 仅我一人（不按旅行人数翻倍，例如给自己买的伴手礼；可在「谁付的款」选自己）
+          </label>
+        </div>
         <div class="form-field">
           <label>谁付的款</label>
           <select id="e_paidby">
@@ -334,6 +341,7 @@ app.modules.expenses = {
     const amtEl = document.getElementById('e_amount');
     const curEl = document.getElementById('e_currency');
     const priceEl = document.getElementById('e_priceType');
+    const singleEl = document.getElementById('e_single');
     const prev = document.getElementById('e_twd_prev');
     if (!amtEl || !curEl || !prev) return;
     const d = app.getActiveDestination();
@@ -342,10 +350,13 @@ app.modules.expenses = {
     const amt = parseFloat(amtEl.value) || 0;
     const unit = curEl.value === 'AUD' ? amt * rate : amt;
     const isTotal = priceEl && priceEl.value === 'total';
+    const isSingle = singleEl && singleEl.checked;
     prev.textContent = amt > 0
-      ? (isTotal
-          ? `💱 总价 ≈ 台币 ¥${unit.toFixed(0)}（已含 ${travelers} 人，每人 ≈ ¥${(unit / travelers).toFixed(0)}）`
-          : `💱 单人 ≈ 台币 ¥${unit.toFixed(0)}　·　${travelers} 人合计 ≈ 台币 ¥${(unit * travelers).toFixed(0)}（1 澳币 = ${rate} 台币）`)
+      ? (isSingle
+          ? `🙋 仅我一人：总额 ≈ 台币 ¥${unit.toFixed(0)}（不乘 ${travelers} 人，≈ A$${(unit / rate).toFixed(0)}）`
+          : isTotal
+            ? `💱 总价 ≈ 台币 ¥${unit.toFixed(0)}（已含 ${travelers} 人，每人 ≈ ¥${(unit / travelers).toFixed(0)}）`
+            : `💱 单人 ≈ 台币 ¥${unit.toFixed(0)}　·　${travelers} 人合计 ≈ 台币 ¥${(unit * travelers).toFixed(0)}（1 澳币 = ${rate} 台币）`)
       : '';
   },
 
@@ -365,6 +376,7 @@ app.modules.expenses = {
       category: document.getElementById('e_cat').value,
       payment: document.getElementById('e_payment').value,
       priceType: document.getElementById('e_priceType').value,
+      single: document.getElementById('e_single') ? document.getElementById('e_single').checked : false,
       merchant: document.getElementById('e_merchant').value.trim(),
       paidBy: document.getElementById('e_paidby').value
     };
@@ -587,13 +599,14 @@ app.modules.expenses = {
     const travelers = Math.max(1, parseFloat(d.travelers) || 1);
     const twdOf = (e) => {
       const unit = (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
+      if (e.single) return unit;
       if (e.priceType === 'total') return unit;
       const mult = (e.priceType === undefined) ? (parseFloat(e.people) || 1) : travelers;
       return unit * mult;
     };
     const rows = expenses.map(e => ({
       日期: e.date, 分类: e.category, 详情: e.detail,
-      货币: e.currency === 'AUD' ? '澳币' : '台币', 原金额: e.amount, 计价: e.priceType === 'total' ? '总价' : '单人',
+      货币: e.currency === 'AUD' ? '澳币' : '台币', 原金额: e.amount, 计价: e.single ? '仅我' : e.priceType === 'total' ? '总价' : '单人',
       台币: Math.round(twdOf(e)), 商家: e.merchant || '', 付款人: e.paidBy || '', 支付方式: e.payment
     }));
     const totalTwd = expenses.reduce((s, e) => s + twdOf(e), 0);

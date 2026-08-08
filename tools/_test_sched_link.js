@@ -70,5 +70,22 @@ console.log('\n[测试] 行程块 开始/时长/结束 联动 onSchedChange');
   assert(parseFloat(els.t_dur.value) === 2, '结束早于开始 → 时长保持不变2h (实际 ' + els.t_dur.value + ')');
 }
 
+console.log('\n[测试] 营业时间午夜跨越(00:00=24:00) 不再误报非营业');
+{
+  const { app } = makeClient();
+  // 16:00-00:00 表示营业到午夜；19:00-22:00 应判为营业内（返回 null）
+  const r1 = app.modules.itinerary.outsideHours('19:00', 3, [{ open: '16:00', close: '00:00' }]);
+  assert(r1 === null, '19:00-22:00 落在 16:00-00:00 营业时间内（不再误报非营业）');
+  // 普通段 16:00-21:00，22:00 结束应报非营业
+  const r2 = app.modules.itinerary.outsideHours('19:00', 3, [{ open: '16:00', close: '21:00' }]);
+  assert(r2 !== null, '19:00-22:00 超出 16:00-21:00 → 提示非营业');
+  // 多段，其一覆盖即营业
+  const r3 = app.modules.itinerary.outsideHours('19:00', 3, [{ open: '10:00', close: '12:00' }, { open: '16:00', close: '00:00' }]);
+  assert(r3 === null, '多段含 16:00-00:00 → 营业内');
+  // 无营业时间返回 null
+  const r4 = app.modules.itinerary.outsideHours('19:00', 3, '');
+  assert(r4 === null, '无营业时间 → null（不报错）');
+}
+
 console.log('\n========== 结果: ' + passed + ' 通过, ' + failed + ' 失败 ==========');
 process.exit(failed === 0 ? 0 : 1);
