@@ -810,13 +810,11 @@ app.modules.itinerary = {
       ${daySel}
       <div class="form-field">
         <label>开始时间（24 小时制）</label>
-        <input type="hidden" id="t_start" value="${s.startTime || '09:00'}" />
-        <div class="time-wheel" data-input="t_start"></div>
+        <select id="t_start" onchange="app.modules.itinerary.onSchedChange('start')">${this.itinTimeOptions(s.startTime || '09:00', 5)}</select>
       </div>
       <div class="form-field">
         <label>结束时间（24 小时制）</label>
-        <input type="hidden" id="t_end" value="${s.endTime || ''}" />
-        <div class="time-wheel" data-input="t_end"></div>
+        <select id="t_end" onchange="app.modules.itinerary.onSchedChange('end')">${this.itinTimeOptions(s.endTime || '', 5)}</select>
       </div>
       <div class="form-field"><label>门票(¥)</label><input type="number" id="t_ticket" min="0" value="${s.ticket || 0}" /></div>
       <div class="form-field"><label>是否需预约</label>
@@ -843,85 +841,16 @@ app.modules.itinerary = {
       const eN = itinTimeToNum(endEl.value);
       const dur = Math.max(0.5, parseFloat(durEl.value) || 1);
       let startN = eN - dur;
-      if (startN < 0) startN = 0;
+      if (startN < 0)       startN = 0;
       startEl.value = itinNumToTime(startN);
-      this._syncWheel('t_start', startEl.value);
       return;
     }
     const dur = Math.max(0.5, parseFloat(durEl.value) || 1);
     let endN = stN + dur;
     if (endN > 23 + 55 / 60) endN = 23 + 55 / 60; // 不超过 23:55
     endEl.value = itinNumToTime(endN);
-    this._syncWheel('t_end', endEl.value);
   },
 
-  /* 滚轮式时间选择器（左小时 0-23 / 右分钟 0-59）。隐藏 input#t_xxx 保存 "HH:MM"，
-     滚轮只是展示与交互；变更通过 onSchedChange 联动。 */
-  initTimeWheel(inputId) {
-    const input = document.getElementById(inputId);
-    if (!input) return;
-    const container = input.parentElement && input.parentElement.querySelector('.time-wheel[data-input="' + inputId + '"]');
-    if (!container) return;
-    const pad = (n) => String(n).padStart(2, '0');
-    const parseVal = (v) => { const p = (v || '00:00').split(':'); return [parseInt(p[0], 10) || 0, parseInt(p[1], 10) || 0]; };
-    const hoursHtml = []; for (let h = 0; h < 24; h++) hoursHtml.push(`<div class="tw-item" data-v="${h}">${pad(h)}</div>`);
-    const minsHtml = []; for (let m = 0; m < 60; m++) minsHtml.push(`<div class="tw-item" data-v="${m}">${pad(m)}</div>`);
-    container.innerHTML = `<div class="tw-col tw-hours">${hoursHtml.join('')}</div><div class="tw-sep">:</div><div class="tw-col tw-mins">${minsHtml.join('')}</div>`;
-    const hourCol = container.querySelector('.tw-hours');
-    const minCol = container.querySelector('.tw-mins');
-    const itemH = (hourCol.querySelector('.tw-item').offsetHeight) || 30;
-
-    // 新块结束时间为空时，给一个与「开始+时长」一致的默认展示值（写入 input，所见即所存）
-    let [h0, m0] = parseVal(input.value);
-    if (!input.value) {
-      if (inputId === 't_end') {
-        const st = itinTimeToNum((document.getElementById('t_start') || {}).value || '09:00');
-        const dur = parseFloat((document.getElementById('t_dur') || {}).value || 1) || 1;
-        let en = st + dur; if (en > 23 + 55 / 60) en = 23 + 55 / 60;
-        h0 = Math.floor(en); m0 = Math.round((en - h0) * 60);
-      } else { h0 = 9; m0 = 0; }
-      input.value = pad(h0) + ':' + pad(m0);
-    }
-
-    const w = { input, hourCol, minCol, itemH, src: inputId === 't_start' ? 'start' : 'end' };
-    w.set = (val) => {
-      const [h, m] = parseVal(val);
-      this._wheelLock = true;
-      hourCol.scrollTop = Math.max(0, h) * w.itemH;
-      minCol.scrollTop = Math.max(0, m) * w.itemH;
-      this._paintWheel(container, h, m);
-      setTimeout(() => { this._wheelLock = false; }, 0);
-    };
-    this._wheels = this._wheels || {};
-    this._wheels[inputId] = w;
-    w.set(input.value);
-
-    const readIdx = (col) => Math.max(0, Math.min(col === hourCol ? 23 : 59, Math.round(col.scrollTop / w.itemH)));
-    let timer = null;
-    const commit = () => {
-      if (this._wheelLock) return;
-      const h = readIdx(hourCol), m = readIdx(minCol);
-      const val = pad(h) + ':' + pad(m);
-      this._paintWheel(container, h, m);
-      if (val === input.value) return; // 程序化滚动导致的事件：值未变则跳过，避免联动死循环
-      input.value = val;
-      this.onSchedChange(w.src);
-    };
-    const onScroll = () => { clearTimeout(timer); timer = setTimeout(commit, 120); };
-    hourCol.addEventListener('scroll', onScroll);
-    minCol.addEventListener('scroll', onScroll);
-  },
-
-  _paintWheel(container, h, m) {
-    if (!container) return;
-    container.querySelectorAll('.tw-hours .tw-item').forEach(el => el.classList.toggle('tw-sel', Number(el.dataset.v) === h));
-    container.querySelectorAll('.tw-mins .tw-item').forEach(el => el.classList.toggle('tw-sel', Number(el.dataset.v) === m));
-  },
-
-  _syncWheel(inputId, val) {
-    const w = this._wheels && this._wheels[inputId];
-    if (w) w.set(val);
-  },
 
   openTripForm(mode, a, b) {
     const cands = app.state.candidates || (app.state.candidates = []);
@@ -1008,9 +937,6 @@ app.modules.itinerary = {
       { text: '取消', class: 'btn btn-ghost', action: 'app.closeModal()' },
       { text: '保存', class: 'btn btn-primary', action: `app.modules.itinerary.saveTrip('${mode}','${a}','${b || ''}')` }
     ]);
-    // 初始化滚轮式时间选择器（开始/结束）
-    this.initTimeWheel('t_start');
-    this.initTimeWheel('t_end');
     // 新行程块：结束时间默认 = 开始时间 + 时长（仅当尚未填写结束时间）
     setTimeout(() => {
       const e = document.getElementById('t_end');
