@@ -732,8 +732,10 @@ app.modules.itinerary = {
     return segs;
   },
 
-  /* 取得营业时间分段：优先用结构化 hoursSegments，否则回退解析旧字符串 */
+  /* 取得营业时间分段：优先用结构化 hoursSegments，否则回退解析旧字符串。
+     若标记为「24 小时开放」(alwaysOpen)，直接返回全天时段 00:00~24:00。 */
   hoursToSegments(s) {
+    if (s && s.alwaysOpen) return [{ open: '00:00', close: '24:00' }];
     if (s && Array.isArray(s.hoursSegments) && s.hoursSegments.length) return s.hoursSegments;
     return this.parseLegacyHours(s && s.hours);
   },
@@ -793,10 +795,16 @@ app.modules.itinerary = {
       <div class="form-field"><label>分类</label><select id="t_type">${typeOpts}</select></div>
       <div class="form-field"><label>时长(小时)</label><input type="number" id="t_dur" min="0.5" step="0.5" value="${s.durationH || 1}" onchange="app.modules.itinerary.onSchedChange('dur')" /></div>
       <div class="form-field col-span-full">
-        <label>🕒 营业时间（可分段）</label>
-        <div id="t_hours_segs">${this.hoursToSegments(s).map((seg, i) => this.hoursSegRow(i, seg)).join('')}</div>
-        <button type="button" class="btn btn-ghost btn-sm mt-1" onclick="app.modules.itinerary.addHoursSeg()">➕ 添加分段</button>
-        <div class="text-tiny text-slate-500 mt-1">从列表选择每段开始/结束时间（如 14:00~16:00）；未添加分段 = 不限制营业时间。可叠加多段（如午市+晚市）。</div>
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" id="t_24h" ${s.alwaysOpen ? 'checked' : ''} onchange="app.modules.itinerary.onAlwaysOpenChange()" />
+          <span>🕛 24 小时开放（全天营业，无需分段）</span>
+        </label>
+        <div id="t_hours_body" class="${s.alwaysOpen ? 'hidden' : ''}">
+          <label>🕒 营业时间（可分段）</label>
+          <div id="t_hours_segs">${this.hoursToSegments(s).map((seg, i) => this.hoursSegRow(i, seg)).join('')}</div>
+          <button type="button" class="btn btn-ghost btn-sm mt-1" onclick="app.modules.itinerary.addHoursSeg()">➕ 添加分段</button>
+          <div class="text-tiny text-slate-500 mt-1">从列表选择每段开始/结束时间（如 14:00~16:00）；未添加分段 = 不限制营业时间。可叠加多段（如午市+晚市）。</div>
+        </div>
       </div>
       <div class="form-field col-span-full">
         <details class="dh-details" ${hasDaily ? 'open' : ''}>
@@ -804,7 +812,8 @@ app.modules.itinerary = {
           <div id="t_daily_hours" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 mt-2">
             ${WD.map(([label, wd]) => {
               const seg = (s.dailyHours && s.dailyHours[wd] && s.dailyHours[wd][0]) || null;
-              const dhOpts = (sel) => '<option value="">— 不填 —</option>' + this.itinTimeOptions(sel || '09:00', 5);
+              // 每天默认「不填」：空值时不选中任何时间选项，让首位的「— 不填 —」成为默认（即沿用通用营业时间）
+              const dhOpts = (sel) => '<option value="">— 不填 —</option>' + this.itinTimeOptions(sel || '', 5);
               return `
               <div class="flex gap-2 items-center mb-1" data-dh="${wd}">
                 <span class="w-10 text-slate-600 text-sm shrink-0">${label}</span>
@@ -897,6 +906,14 @@ app.modules.itinerary = {
     wrap.classList.toggle('hidden', !dayEl.value);
   },
 
+  /* 勾选「24 小时开放」时隐藏分段营业时间编辑器（全天营业无需分段） */
+  onAlwaysOpenChange() {
+    const cb = document.getElementById('t_24h');
+    const body = document.getElementById('t_hours_body');
+    if (!cb || !body) return;
+    body.classList.toggle('hidden', cb.checked);
+  },
+
   /* 行程块表单：开始 / 时长 / 结束时间 三者联动
      - 改「开始」或「时长」→ 结束 = 开始 + 时长（自动填写，封顶 23:55）
      - 改「结束」→ 时长 = 结束 - 开始（自动改） */
@@ -964,7 +981,8 @@ app.modules.itinerary = {
             durationH: cand.durationH || 2, ticket: placed ? placed.ticket : 0, reservation: placed ? placed.reservation : '',
             address: cand.address || '', hours: cand.hours || '', mapUrl: cand.mapUrl || '', image: cand.image || '', note: cand.note || '',
             closedDays: Array.isArray(cand.closedDays) ? cand.closedDays : [],
-            dailyHours: cand.dailyHours || {}
+            dailyHours: cand.dailyHours || {},
+            alwaysOpen: !!cand.alwaysOpen
           };
         } else {
           s = { name: '', type: 'spot', startTime: '09:00', durationH: 2, ticket: 0, reservation: '', address: '', hours: '', mapUrl: '', image: '', note: '', closedDays: [] };
@@ -1035,8 +1053,16 @@ app.modules.itinerary = {
     const _segs = _segEls
       .map(el => ({ open: el.querySelector('.t_hours_open').value, close: el.querySelector('.t_hours_close').value }))
       .filter(g => g.open && g.close);
-    common.hoursSegments = _segs;
-    common.hours = _segs.map(g => `${g.open}-${g.close}`).join('; ');
+    // 「24 小时开放」：标记 alwaysOpen，清空分段（全天营业无需分段），hours 显示「24小时」
+    const alwaysOpen = document.getElementById('t_24h') ? document.getElementById('t_24h').checked : false;
+    common.alwaysOpen = alwaysOpen;
+    if (alwaysOpen) {
+      common.hoursSegments = [];
+      common.hours = '24小时';
+    } else {
+      common.hoursSegments = _segs;
+      common.hours = _segs.map(g => `${g.open}-${g.close}`).join('; ');
+    }
     // 固定休息日：收集勾选的星期（data-wd = getDay() 值，0=周日…6=周六）
     const _closedEls = Array.from(document.querySelectorAll('#t_closed input[type=checkbox]'));
     common.closedDays = _closedEls.filter(el => el.checked).map(el => parseInt(el.dataset.wd, 10)).sort((a, b) => a - b);
@@ -1165,7 +1191,8 @@ app.modules.itinerary = {
       image: s.image || '',
       note: s.note || '',
       closedDays: Array.isArray(s.closedDays) ? s.closedDays : [],
-      dailyHours: s.dailyHours || {}
+      dailyHours: s.dailyHours || {},
+      alwaysOpen: !!s.alwaysOpen
     };
   },
 
@@ -1182,7 +1209,8 @@ app.modules.itinerary = {
       image: common.image,
       note: common.note,
       closedDays: Array.isArray(common.closedDays) ? common.closedDays : [],
-      dailyHours: common.dailyHours || {}
+      dailyHours: common.dailyHours || {},
+      alwaysOpen: !!common.alwaysOpen
     };
   },
 
@@ -1198,6 +1226,7 @@ app.modules.itinerary = {
     cand.note = common.note;
     cand.closedDays = Array.isArray(common.closedDays) ? common.closedDays : [];
     cand.dailyHours = common.dailyHours || {};
+    cand.alwaysOpen = !!common.alwaysOpen;
   },
 
   // 把行程库项目改动同步到所有关联行程块（按 sourceId 跨目的地）
@@ -1208,6 +1237,7 @@ app.modules.itinerary = {
       hours: common.hours, mapUrl: common.mapUrl,
       image: common.image, note: common.note,
       closedDays: Array.isArray(common.closedDays) ? common.closedDays : [],
+      alwaysOpen: !!common.alwaysOpen,
       dailyHours: common.dailyHours || {}
     };
     (app.state.destinations || []).forEach(dest => {

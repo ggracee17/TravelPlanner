@@ -225,6 +225,7 @@ app.modules.candidates = {
       hours: c.hours || '',
       hoursSegments: c.hoursSegments || [],
       dailyHours: c.dailyHours || {},
+      alwaysOpen: !!c.alwaysOpen,
       ticket: 0, reservation: '', transport: '', transportCost: 0,
       mapUrl: c.mapUrl || '',
       image: c.image || '',
