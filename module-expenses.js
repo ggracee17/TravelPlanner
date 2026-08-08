@@ -273,11 +273,11 @@ app.modules.expenses = {
         </div>
         <div class="form-field col-span-full">
           <div style="display:flex; gap:0.75rem; align-items:flex-start;">
-            <div style="flex:1;">
+            <div style="flex:1; display:flex; flex-direction:column; gap:0.25rem;">
               <label>消费详情 <span class="req">*</span></label>
               <input id="e_detail" value="${e.detail || ''}" placeholder="如：东京塔门票 / 京都到大阪新干线" />
             </div>
-            <div style="width:12rem;">
+            <div style="width:14rem; display:flex; flex-direction:column; gap:0.25rem;">
               <label>商家名称</label>
               <input id="e_merchant" value="${e.merchant || ''}" placeholder="如：7-11 / 全家 / 高岛屋" />
             </div>

@@ -745,7 +745,7 @@ app.modules.itinerary = {
     return `
       <div class="form-field col-span-full"><label>名称 <span class="req">*</span></label><input id="t_name" value="${s.name || ''}" placeholder="如：台北101" /></div>
       <div class="form-field"><label>分类</label><select id="t_type">${typeOpts}</select></div>
-      <div class="form-field"><label>时长(小时)</label><input type="number" id="t_dur" min="0.5" step="0.5" value="${s.durationH || 1}" /></div>
+      <div class="form-field"><label>时长(小时)</label><input type="number" id="t_dur" min="0.5" step="0.5" value="${s.durationH || 1}" onchange="app.modules.itinerary.onSchedChange('dur')" /></div>
       <div class="form-field col-span-full">
         <label>🕒 营业时间（可分段）</label>
         <div id="t_hours_segs">${this.hoursToSegments(s).map((seg, i) => this.hoursSegRow(i, seg)).join('')}</div>
@@ -792,8 +792,8 @@ app.modules.itinerary = {
       : '';
     return `
       ${daySel}
-      <div class="form-field"><label>开始时间（24 小时制）</label><select id="t_start">${this.itinTimeOptions(s.startTime || '09:00', 5)}</select></div>
-      <div class="form-field"><label>结束时间（24 小时制）</label><select id="t_end">${this.itinTimeOptions(s.endTime || '', 5)}</select></div>
+      <div class="form-field"><label>开始时间（24 小时制）</label><select id="t_start" onchange="app.modules.itinerary.onSchedChange('start')">${this.itinTimeOptions(s.startTime || '09:00', 5)}</select></div>
+      <div class="form-field"><label>结束时间（24 小时制）</label><select id="t_end" onchange="app.modules.itinerary.onSchedChange('end')">${this.itinTimeOptions(s.endTime || '', 5)}</select></div>
       <div class="form-field"><label>门票(¥)</label><input type="number" id="t_ticket" min="0" value="${s.ticket || 0}" /></div>
       <div class="form-field"><label>是否需预约</label>
         <select id="t_resv">
@@ -803,6 +803,26 @@ app.modules.itinerary = {
         </select>
       </div>
     `;
+  },
+
+  /* 行程块表单：开始 / 时长 / 结束时间 三者联动
+     - 改「开始」或「时长」→ 结束 = 开始 + 时长（自动填写，封顶 23:55）
+     - 改「结束」→ 时长 = 结束 - 开始（自动改） */
+  onSchedChange(src) {
+    const startEl = document.getElementById('t_start');
+    const endEl = document.getElementById('t_end');
+    const durEl = document.getElementById('t_dur');
+    if (!startEl || !endEl || !durEl) return;
+    const stN = itinTimeToNum(startEl.value);
+    if (src === 'end') {
+      const eN = itinTimeToNum(endEl.value);
+      if (eN > stN) durEl.value = (Math.round((eN - stN) * 100) / 100).toString();
+      return;
+    }
+    const dur = Math.max(0.5, parseFloat(durEl.value) || 1);
+    let endN = stN + dur;
+    if (endN > 23 + 55 / 60) endN = 23 + 55 / 60; // 不超过下拉最大值 23:55
+    endEl.value = itinNumToTime(endN);
   },
 
   openTripForm(mode, a, b) {
@@ -889,6 +909,11 @@ app.modules.itinerary = {
       { text: '取消', class: 'btn btn-ghost', action: 'app.closeModal()' },
       { text: '保存', class: 'btn btn-primary', action: `app.modules.itinerary.saveTrip('${mode}','${a}','${b || ''}')` }
     ]);
+    // 新行程块：结束时间默认 = 开始时间 + 时长（仅当尚未填写结束时间）
+    setTimeout(() => {
+      const e = document.getElementById('t_end');
+      if (e && !e.value) app.modules.itinerary.onSchedChange('dur');
+    }, 0);
   },
 
   saveTrip(mode, a, b) {
