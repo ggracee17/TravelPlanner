@@ -17,18 +17,9 @@ app.modules.candidates = {
     const cands = Array.isArray(app.state.candidates) ? app.state.candidates : (app.state.candidates = []);
     const d = app.getActiveDestination();
 
-    // 统计每个行程库项目当前落入的日期（用于排序与勾选态提示）
-    const placedMap = {};
-    if (d) {
-      const days = (app.state[d.id]?.itinerary || [])
-        .slice()
-        .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-      days.forEach((day, i) => {
-        (day.spots || []).forEach(s => {
-          if (s.sourceId) placedMap[s.sourceId] = { dayIndex: i, date: day.date, startTime: s.startTime };
-        });
-      });
-    }
+    // 统计每个行程库项目当前落入的日期（用于排序与「已加入 N 个日期」提示）
+    // 一个行程库项目可被复制到多个日期，因此按 sourceId 收集全部落点
+    const placedMap = this._buildPlacedMap(d ? d.id : null);
 
     const sorted = this.sortCandidates(cands, placedMap);
     const filter = app.state.candFilter || '__all';
@@ -74,6 +65,31 @@ app.modules.candidates = {
     app.renderAll();
   },
 
+  /* 统计每个行程库项目落入的日期（按 sourceId 收集全部落点，支持「已加入 N 个日期」）。
+     返回 { [sourceId]: { count, days:[{dayIndex,date,startTime}], firstDayIndex, date, startTime } } */
+  _buildPlacedMap(destId) {
+    const placedMap = {};
+    if (!destId) return placedMap;
+    const days = (app.state[destId]?.itinerary || [])
+      .slice()
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    days.forEach((day, i) => {
+      (day.spots || []).forEach(s => {
+        if (!s.sourceId) return;
+        if (!placedMap[s.sourceId]) placedMap[s.sourceId] = { count: 0, days: [], firstDayIndex: 999 };
+        const pm = placedMap[s.sourceId];
+        pm.count++;
+        pm.days.push({ dayIndex: i, date: day.date, startTime: s.startTime });
+        if (i < pm.firstDayIndex) {
+          pm.firstDayIndex = i;
+          pm.date = day.date;
+          pm.startTime = s.startTime;
+        }
+      });
+    });
+    return placedMap;
+  },
+
   /* 排序：未加入→最前；已加入→按日期(dayIndex)再按开始时间 */
   sortCandidates(cands, placedMap) {
     return cands.map((c, i) => ({ c, i }))
@@ -82,8 +98,8 @@ app.modules.candidates = {
         const pb = placedMap[B.c.id] ? 1 : 0;
         if (pa !== pb) return pa - pb;           // 未加入(0) 排最前
         if (!pa) return A.i - B.i;               // 都未加入：保持原顺序
-        const da = placedMap[A.c.id].dayIndex, db = placedMap[B.c.id].dayIndex;
-        if (da !== db) return da - db;           // 按日程日期顺序
+        const da = placedMap[A.c.id].firstDayIndex, db = placedMap[B.c.id].firstDayIndex;
+        if (da !== db) return da - db;           // 按最早落入的日程日期顺序
         return itinTimeToNum(placedMap[A.c.id].startTime) - itinTimeToNum(placedMap[B.c.id].startTime);
       })
       .map(x => x.c);
@@ -95,9 +111,11 @@ app.modules.candidates = {
       '交通': 'badge badge-transport', '购物': 'badge badge-shop', '其他': 'badge badge-other'
     }[c.type] || 'badge badge-other';
 
-    const placedText = placed
-      ? `✅ 已加入 · Day ${placed.dayIndex + 1}（${placed.date || '?'}）${placed.startTime || ''}`
-      : '未加入行程';
+    const placedText = !placed || placed.count === 0
+      ? '未加入行程'
+      : placed.count === 1
+        ? `✅ 已加入 · Day ${placed.firstDayIndex + 1}（${placed.date || '?'}）${placed.startTime || ''}`
+        : `✅ 已加入 ${placed.count} 个日期（Day ${placed.days.map(x => x.dayIndex + 1).join('、')}）`;
 
     return `
       <div class="candidate-card ${c.checked ? 'is-checked' : ''}">

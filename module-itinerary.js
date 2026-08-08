@@ -106,6 +106,7 @@ app.modules.itinerary = {
               <option value="bicycling" ${travMode === 'bicycling' ? 'selected' : ''}>🚲 ${app.t('itinerary.bicycling')}</option>
             </select>
             <button class="btn btn-primary" onclick="app.modules.itinerary.computeTravelAll()" title="按顶部所选交通方式，重新计算所有天的相邻行程点交通时间">${app.t('itinerary.recalc')}</button>
+            <button class="btn btn-ghost" onclick="app.modules.itinerary.clearTravelAll()" title="清除当前目的地所有天的相邻交通时间（设为待重算，可再次点「重新计算」）">🧹 清除交通时间</button>
             <button class="btn ${app.state.ecoMode ? 'btn-warning' : 'btn-ghost'}" onclick="app.modules.itinerary.toggleEco()" title="开启后暂停「交通距离计算」与「地图自动地理编码」两类 Google API 调用，省 credits">💡 ${app.t('itinerary.ecoLabel')}：${app.state.ecoMode ? app.t('on') : app.t('off')}</button>
             <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleZoom()">${app.state.itineraryZoom === 'compact' ? '🔍 ' + app.t('itinerary.zoomLoose') : '🔍 ' + app.t('itinerary.zoomCompact')}</button>
             <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleExpand()">${expanded ? '🔼 ' + app.t('itinerary.collapse') : '🔽 ' + app.t('itinerary.expand')}</button>
@@ -487,6 +488,17 @@ app.modules.itinerary = {
     (app.state[d.id]?.itinerary || []).forEach(day => { if (day.spots) day.spots.forEach(s => { s.travelFromPrev = null; }); });
   },
 
+  /* 清除当前目的地下所有天的相邻交通时间（设为待重算） */
+  clearTravelAll() {
+    const d = app.getActiveDestination();
+    if (!d) return;
+    if (!confirm('确定清除当前目的地所有天的交通时间？（之后可点「重新计算全部交通时间」再算）')) return;
+    this._clearTravelAllDays();
+    app.saveState();
+    app.renderAll();
+    app.toast('已清除全部交通时间', 'success');
+  },
+
   computeTravel(dayId, silent) {
     if (app.state.ecoMode) {
       if (!silent) app.toast('💡 省 Credits 模式已开启，交通距离计算已暂停', 'info');
@@ -860,6 +872,7 @@ app.modules.itinerary = {
         ${sched}
       </div>
     `, [
+      ...(mode === 'spot' && !isNew ? [{ text: '📋 复制到其它日期', class: 'btn btn-secondary', action: `app.modules.itinerary.copyTripToOtherDays('${a}','${b}')` }] : []),
       ...(mode === 'spot' && !isNew ? [{ text: '从表移除', class: 'btn btn-danger', action: `app.modules.itinerary.deleteTrip('${a}','${b}')` }] : []),
       { text: '取消', class: 'btn btn-ghost', action: 'app.closeModal()' },
       { text: '保存', class: 'btn btn-primary', action: `app.modules.itinerary.saveTrip('${mode}','${a}','${b || ''}')` }
@@ -975,8 +988,22 @@ app.modules.itinerary = {
     app.toast('已保存', 'success');
   },
 
-  _createCandFromCommon(common) {
+  /* 把一个行程块（spot）转成「公共字段」对象，用于同步/创建行程库项目（无需 DOM） */
+  _spotToCommon(s) {
     return {
+      name: s.name || '',
+      type: s.type || 'spot',
+      durationH: parseFloat(s.durationH) || 1,
+      endTime: s.endTime || '',
+      hoursSegments: s.hoursSegments || [],
+      hours: s.hours || '',
+      mapUrl: s.mapUrl || '',
+      image: s.image || '',
+      note: s.note || ''
+    };
+  },
+
+  _createCandFromCommon(common) {    return {
       id: 'cand_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       checked: true,
       name: common.name,
@@ -1031,6 +1058,85 @@ app.modules.itinerary = {
     app.closeModal();
     app.renderAll();
     app.toast('已从行程表移除（行程库保留）', 'success');
+  },
+
+  /* ===== 复制行程块到其它日期（共享同一行程库项目，不重复添加） ===== */
+  copyTripToOtherDays(dayId, spotId) {
+    const d = app.getActiveDestination();
+    if (!d) return;
+    const srcDay = (app.state[d.id].itinerary || []).find(x => x.id === dayId);
+    const spot = srcDay && (srcDay.spots || []).find(s => s.id === spotId);
+    if (!spot) return;
+    const days = (app.state[d.id].itinerary || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const opts = days.map((dy, i) =>
+      dy.id === dayId ? '' :
+      `<label class="flex items-center gap-2 p-2 rounded border border-slate-200 mb-1 cursor-pointer">
+        <input type="checkbox" class="copy-day-cb" value="${dy.id}" checked />
+        <span>Day ${i + 1} · ${dy.date || '未填日期'}</span>
+      </label>`
+    ).join('');
+    if (!opts) return app.toast('没有其他日期可复制', 'warning');
+    app.openModal('📋 复制到其它日期', `
+      <p class="text-sm text-slate-600 mb-2">把「<strong>${spot.name}</strong>」复制为独立的行程块到以下日期（与原块<strong>共享同一行程库项目</strong>，不会在行程库里重复添加；可在目标日再单独改时间）。</p>
+      <div class="max-h-64 overflow-y-auto">${opts}</div>
+    `, [
+      { text: '取消', class: 'btn btn-ghost', action: 'app.closeModal()' },
+      { text: '复制', class: 'btn btn-secondary', action: `app.modules.itinerary.confirmCopyTrip('${dayId}','${spotId}')` }
+    ]);
+  },
+
+  confirmCopyTrip(dayId, spotId) {
+    const d = app.getActiveDestination();
+    if (!d) return;
+    const srcDay = (app.state[d.id].itinerary || []).find(x => x.id === dayId);
+    const spot = srcDay && (srcDay.spots || []).find(s => s.id === spotId);
+    if (!spot) return;
+    // 确保存在对应的行程库项目（原块没有 sourceId 时新建；有则同步最新内容）
+    if (!spot.sourceId) {
+      const nc = this._createCandFromCommon(this._spotToCommon(spot));
+      (app.state.candidates || (app.state.candidates = [])).push(nc);
+      spot.sourceId = nc.id;
+    } else {
+      const cand = (app.state.candidates || []).find(c => c.id === spot.sourceId);
+      if (cand) this._writeCommonToCand(cand, this._spotToCommon(spot));
+    }
+    const cbs = Array.from(document.querySelectorAll('.copy-day-cb:checked'));
+    if (!cbs.length) return app.toast('请至少选择一个日期', 'warning');
+    const list = app.state[d.id].itinerary;
+    let count = 0;
+    const cand = (app.state.candidates || []).find(c => c.id === spot.sourceId);
+    if (cand) cand.checked = true;
+    cbs.forEach(cb => {
+      const tday = list.find(x => x.id === cb.value);
+      if (!tday) return;
+      if (!tday.spots) tday.spots = [];
+      const ns = {
+        id: 'sp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        sourceId: spot.sourceId,
+        name: spot.name, type: spot.type,
+        startTime: spot.startTime || '09:00',
+        endTime: spot.endTime || '',
+        durationH: parseFloat(spot.durationH) || 1,
+        ticket: parseFloat(spot.ticket) || 0,
+        reservation: spot.reservation || '',
+        hoursSegments: spot.hoursSegments || [],
+        hours: spot.hours || '',
+        mapUrl: spot.mapUrl || '', image: spot.image || '',
+        note: spot.note || '',
+        address: spot.address || '',
+        lat: spot.lat != null ? spot.lat : null,
+        lng: spot.lng != null ? spot.lng : null,
+        travelFromPrev: null
+      };
+      tday.spots.push(ns);
+      tday.spots.sort((a, b) => itinTimeToNum(a.startTime) - itinTimeToNum(b.startTime));
+      this.clearTravelForDay(tday.id);
+      count++;
+    });
+    app.saveState();
+    app.closeModal();
+    app.renderAll();
+    app.toast(`已复制「${spot.name}」到 ${count} 天（共享同一行程库项目）`, 'success');
   },
 
   /* ===== 修改 日期 / 天气 ===== */
