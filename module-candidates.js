@@ -240,6 +240,12 @@ app.modules.candidates = {
     if (!d) return;
     const list = app.state[d.id]?.itinerary || [];
     list.forEach(day => { if (day.spots) day.spots = day.spots.filter(s => s.sourceId !== sourceId); });
+    // 若该行程库项目已不在任何一天出现，则标记为「未加入行程」
+    const stillPlaced = list.some(dy => (dy.spots || []).some(s => s.sourceId === sourceId));
+    if (!stillPlaced) {
+      const c = (Array.isArray(app.state.candidates) ? app.state.candidates : []).find(x => x.id === sourceId);
+      if (c) c.checked = false;
+    }
   },
 
   deleteCandidate(id) {

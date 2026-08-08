@@ -1254,12 +1254,21 @@ app.modules.itinerary = {
     if (!d) return;
     const day = (app.state[d.id].itinerary || []).find(x => x.id === dayId);
     if (!day) return;
+    const removed = (day.spots || []).find(s => s.id === spotId);
     day.spots = (day.spots || []).filter(s => s.id !== spotId);
+    // 从行程表移除后，若该行程库项目没有再出现在任何一天，则标记为「未加入行程」
+    if (removed && removed.sourceId) {
+      const stillPlaced = (app.state[d.id].itinerary || []).some(dy => (dy.spots || []).some(s => s.sourceId === removed.sourceId));
+      if (!stillPlaced) {
+        const c = (Array.isArray(app.state.candidates) ? app.state.candidates : []).find(x => x.id === removed.sourceId);
+        if (c) c.checked = false;
+      }
+    }
     this.clearTravelForDay(dayId);
     app.saveState();
     app.closeModal();
     app.renderAll();
-    app.toast('已从行程表移除（行程库保留）', 'success');
+    app.toast('已从行程表移除（行程库保留，已标记为未加入）', 'success');
   },
 
   /* ===== 复制行程块到其它日期（共享同一行程库项目，不重复添加） ===== */

@@ -77,9 +77,9 @@ app.modules.home = {
           <ul class="text-xs text-slate-600 space-y-1 leading-relaxed">
             <li>• <strong>板块1</strong> 目的地总览档案库：每新增一座城市独立建档</li>
             <li>• <strong>板块2</strong> 每日精细化行程表：含天气、景点、交通、住宿等全字段</li>
-            <li>• <strong>板块3</strong> 行前核对清单：证件清单 + 行李清单</li>
+            <li>• <strong>板块3</strong> 核对清单：证件清单 + 行李清单</li>
             <li>• <strong>板块4</strong> 旅行花销记账台账：实时联动总账，超支自动提醒</li>
-            <li>• <strong>板块5</strong> 行程库：录入备选行程（餐厅 / 景点 / 住宿），勾选加入每日行程；未加入的排最前、已加入的按日期排序</li>
+            <li>• <strong>板块5</strong> 行程库：录入备选行程（餐饮 / 景点 / 住宿），勾选加入每日行程；未加入的排最前、已加入的按日期排序</li>
             <li>• <strong>板块6</strong> 行程地图总览：在地图上标出每日行程地点，可按日期筛选查看</li>
             <li>• 顶部「💾 备份/恢复」可导出 JSON 备份</li>
           </ul>

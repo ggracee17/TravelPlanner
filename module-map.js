@@ -27,7 +27,7 @@ const DAY_COLORS = ['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#14b8a6', '#06b
 
 // 单日视图：按「地点类别」分色，复用 MAP_COLORS + 中文标签
 const CATEGORY_LABELS = {
-  restaurant: '餐厅', hotel: '酒店', spot: '景点',
+  restaurant: '餐饮', hotel: '酒店', spot: '景点',
   transport: '交通', shopping: '购物', other: '其他'
 };
 

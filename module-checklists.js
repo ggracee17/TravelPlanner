@@ -107,6 +107,21 @@ app.modules.checklists = {
         </div>
       </div>
 
+      <!-- 待办事项（放在最顶上） -->
+      <div class="card">
+        <div class="card-title">
+          <span>📋 ${app.t('todo.title')}（${app.t('checklist.checked')} ${todoDone} / ${todos.length}）</span>
+          <div class="ml-auto flex gap-2">
+            <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addTodo()">${app.t('todo.add')}</button>
+          </div>
+        </div>
+        ${todos.length === 0 ? '<p class="text-sm text-slate-400 mt-2">还没有待办事项，点「➕ 添加待办」记录需要办的事。</p>' : `
+          <div id="todoList">
+            ${todos.map(t => this.renderTodoItem(t)).join('')}
+          </div>
+        `}
+      </div>
+
       <!-- 证件清单 -->
       <div class="card">
         <div class="card-title">
@@ -130,21 +145,6 @@ app.modules.checklists = {
         </div>
         <p class="text-tiny text-slate-500 mb-2">已按品类分组：衣物 / 洗护 / 电子设备 / 药品 / 随身杂物</p>
         ${this.renderLugByCategory(lug)}
-      </div>
-
-      <!-- 待办事项 -->
-      <div class="card">
-        <div class="card-title">
-          <span>📋 ${app.t('todo.title')}（${app.t('checklist.checked')} ${todoDone} / ${todos.length}）</span>
-          <div class="ml-auto flex gap-2">
-            <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addTodo()">${app.t('todo.add')}</button>
-          </div>
-        </div>
-        ${todos.length === 0 ? '<p class="text-sm text-slate-400 mt-2">还没有待办事项，点「➕ 添加待办」记录需要办的事。</p>' : `
-          <div id="todoList">
-            ${todos.map(t => this.renderTodoItem(t)).join('')}
-          </div>
-        `}
       </div>
     `;
   },
