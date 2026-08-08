@@ -187,8 +187,8 @@ app.modules.itinerary = {
     const win = this.dayWindow(day, expanded);
     const hpx = itinHourPx();
     const allSpots = day.spots || [];
-    // 6 点以前的行程不画在行程表上（保持每天长度一致）
-    const spots = allSpots.filter(s => itinTimeToNum(s.startTime) >= ITIN_TL_START);
+    // 不再过滤 6 点前的行程：清晨航班 / 日出 / 深夜抵达等活动照常画在行程表（仅在时间轴顶部对齐），避免「已加入却看不到」
+    const spots = allSpots;
     const laneMap = this.computeLanes(spots);
     const totalTicket = spots.reduce((s, x) => s + (parseFloat(x.ticket) || 0), 0);
     const hours = [];
@@ -807,24 +807,33 @@ app.modules.itinerary = {
         </div>
       </div>
       <div class="form-field col-span-full">
-        <details class="dh-details" ${hasDaily ? 'open' : ''}>
+        <details class="dh-details" ${(hasDaily || s.alwaysOpen) ? 'open' : ''}>
           <summary class="dh-summary">🗓️ 每日营业时间（若每天不同，分别设置；留空则该天沿用上方通用营业时间）</summary>
           <div id="t_daily_hours" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 mt-2">
             ${WD.map(([label, wd]) => {
               const seg = (s.dailyHours && s.dailyHours[wd] && s.dailyHours[wd][0]) || null;
-              // 每天默认「不填」：空值时不选中任何时间选项，让首位的「— 不填 —」成为默认（即沿用通用营业时间）
-              const dhOpts = (sel) => '<option value="">— 不填 —</option>' + this.itinTimeOptions(sel || '', 5);
+              // 24 小时开放时，每天固定为 00:00~24:00（全天）并锁定编辑；否则每天默认「不填」沿用通用营业时间
+              const dhOpenSel = s.alwaysOpen ? '00:00' : (seg ? seg.open : '');
+              const dhCloseSel = s.alwaysOpen ? '24:00' : (seg ? seg.close : '');
+              const dhDisabled = s.alwaysOpen ? 'disabled' : '';
+              const dhOpts = (sel) => {
+                const base = '<option value="">— 不填 —</option>' + this.itinTimeOptions(sel && sel !== '24:00' ? sel : '', 5);
+                const o24 = (sel === '24:00') ? '<option value="24:00" selected>24:00</option>' : '<option value="24:00">24:00</option>';
+                return base + o24;
+              };
               return `
               <div class="flex gap-2 items-center mb-1" data-dh="${wd}">
                 <span class="w-10 text-slate-600 text-sm shrink-0">${label}</span>
-                <select class="t_dh_open flex-1">${dhOpts(seg ? seg.open : '')}</select>
+                <select class="t_dh_open flex-1" ${dhDisabled}>${dhOpts(dhOpenSel)}</select>
                 <span class="text-slate-500">~</span>
-                <select class="t_dh_close flex-1">${dhOpts(seg ? seg.close : '')}</select>
+                <select class="t_dh_close flex-1" ${dhDisabled}>${dhOpts(dhCloseSel)}</select>
                 <button type="button" class="btn btn-ghost btn-sm shrink-0" onclick="app.modules.itinerary.clearDailyHour(this)">清除</button>
               </div>`;
             }).join('')}
           </div>
-          <div class="text-tiny text-slate-500 mt-1">按星期分别设置（如周一至周五 09:00~17:00，周末 09:00~18:00）。某天留空即沿用上方通用营业时间；时间轴会按当天星期校验「非营业」提示。点击上方标题可展开/收起。</div>
+          ${s.alwaysOpen
+            ? '<p class="text-tiny text-emerald-600 mt-1">🕛 已选 24 小时开放：每天均按 <strong>00:00~24:00（全天）</strong> 处理，下方每日时间已锁定为「全天」，保存后时间轴不再提示「非营业」。</p>'
+            : '<p class="text-tiny text-slate-500 mt-1">按星期分别设置（如周一至周五 09:00~17:00，周末 09:00~18:00）。某天留空即沿用上方通用营业时间；时间轴会按当天星期校验「非营业」提示。点击上方标题可展开/收起。</p>'}
         </details>
       </div>
       <div class="form-field col-span-full">
@@ -906,12 +915,23 @@ app.modules.itinerary = {
     wrap.classList.toggle('hidden', !dayEl.value);
   },
 
-  /* 勾选「24 小时开放」时隐藏分段营业时间编辑器（全天营业无需分段） */
+  /* 勾选「24 小时开放」时：隐藏分段营业时间编辑器，并把每日营业时间同步为「每天 00:00~24:00（全天）」并锁定编辑 */
   onAlwaysOpenChange() {
     const cb = document.getElementById('t_24h');
     const body = document.getElementById('t_hours_body');
     if (!cb || !body) return;
-    body.classList.toggle('hidden', cb.checked);
+    const on = cb.checked;
+    body.classList.toggle('hidden', on);
+    // 同步每日营业时间：开 → 每天 00:00~24:00 且禁用；关 → 解除禁用并清空（恢复「沿用通用营业时间」）
+    const rows = typeof document.querySelectorAll === 'function'
+      ? document.querySelectorAll('#t_daily_hours [data-dh]') : [];
+    rows.forEach(row => {
+      const o = row.querySelector ? row.querySelector('.t_dh_open') : null;
+      const c = row.querySelector ? row.querySelector('.t_dh_close') : null;
+      if (!o || !c) return;
+      if (on) { o.value = '00:00'; c.value = '24:00'; o.disabled = true; c.disabled = true; }
+      else { o.disabled = false; c.disabled = false; o.value = ''; c.value = ''; }
+    });
   },
 
   /* 行程块表单：开始 / 时长 / 结束时间 三者联动

@@ -40,7 +40,7 @@ function assert(cond, msg) {
 const { app, ctx } = makeClient();
 const itin = app.modules.itinerary;
 
-console.log('\n[测试A] 时间轴固定 06:00–24:00（每天等长，早于 6 点的行程不画在行程表）');
+console.log('\n[测试A] 时间轴固定 06:00–24:00（每天等长；早于 6 点的行程照常画在行程表，顶部对齐）');
 {
   const earlySpot = { id: 'sp1', name: 'Hotel', type: 'hotel', startTime: '00:10', endTime: '12:10', durationH: 12, ticket: 0, reservation: '', hoursSegments: [] };
   const day = { id: 'd1', spots: [earlySpot] };
@@ -55,7 +55,7 @@ console.log('\n[测试A] 时间轴固定 06:00–24:00（每天等长，早于 6
   assert(empty.start === 6 && empty.end === 24, '空日程：窗口仍为 6–24（每天等长）');
 }
 
-console.log('\n[测试B] 6 点前行程不在行程表渲染；白天行程正常；每天时间轴等高');
+console.log('\n[测试B] 6 点前行程照常渲染在行程表（不再被隐藏）；白天行程正常；每天时间轴等高');
 {
   const early = { id: 'sp1', name: 'RedEye', type: 'spot', startTime: '00:10', durationH: 1, ticket: 0, reservation: '', hoursSegments: [] };
   const mid = { id: 'sp2', name: 'Museum', type: 'spot', startTime: '09:00', durationH: 2, ticket: 0, reservation: '', hoursSegments: [] };
@@ -63,7 +63,7 @@ console.log('\n[测试B] 6 点前行程不在行程表渲染；白天行程正�
 
   const html = itin.renderDayColumn(day, 0, { id: 'x' }, false);
   assert(html.includes('sp2'), '白天行程(09:00) 仍渲染在行程表');
-  assert(!html.includes('sp1'), '6 点前行程(00:10) 不渲染在行程表');
+  assert(html.includes('sp1'), '6 点前行程(00:10) 现在也渲染在行程表（修复：不再因早于 6 点而消失）');
 
   // 等高：只有凌晨行程的天 vs 只有白天行程的天，时间轴高度一致（均为 18h）
   const htmlEarlyOnly = itin.renderDayColumn({ id: 'dE', date: '2026-08-09', spots: [early] }, 0, { id: 'x' }, false);
