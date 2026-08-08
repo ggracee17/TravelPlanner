@@ -272,17 +272,13 @@ app.modules.expenses = {
             <option ${e.category==='其他杂费'?'selected':'' || !e.category?'selected':''}>其他杂费</option>
           </select>
         </div>
-        <div class="form-field col-span-full">
-          <div style="display:flex; gap:0.75rem; align-items:flex-start;">
-            <div style="flex:1; display:flex; flex-direction:column; gap:0.25rem;">
-              <label>消费详情 <span class="req">*</span></label>
-              <input id="e_detail" value="${e.detail || ''}" placeholder="如：东京塔门票 / 京都到大阪新干线" />
-            </div>
-            <div style="width:14rem; display:flex; flex-direction:column; gap:0.25rem;">
-              <label>商家名称</label>
-              <input id="e_merchant" value="${e.merchant || ''}" placeholder="如：7-11 / 全家 / 高岛屋" />
-            </div>
-          </div>
+        <div class="form-field col-span-2">
+          <label>消费详情 <span class="req">*</span></label>
+          <input id="e_detail" value="${e.detail || ''}" placeholder="如：东京塔门票 / 京都到大阪新干线" />
+        </div>
+        <div class="form-field">
+          <label>商家名称</label>
+          <input id="e_merchant" value="${e.merchant || ''}" placeholder="如：7-11 / 全家 / 高岛屋" />
         </div>
         <div class="form-field">
           <label>消费货币 <span class="req">*</span></label>
