@@ -23,7 +23,13 @@ app.modules.candidates = {
 
     const sorted = this.sortCandidates(cands, placedMap);
     const filter = app.state.candFilter || '__all';
-    const view = filter === '__all' ? sorted : sorted.filter(c => c.type === filter);
+    // 按日期筛选（与类型筛选组合）：全部 / 未加入行程 / 某个 Day
+    const dateFilter = app.state.candDateFilter || '__all';
+    const days = (d ? (app.state[d.id]?.itinerary || []) : []).slice()
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    let view = sorted;
+    if (filter !== '__all') view = view.filter(c => c.type === filter);
+    view = this.filterByDate(view, placedMap, dateFilter, days);
 
     sec.innerHTML = `
       <div class="card">
@@ -50,6 +56,14 @@ app.modules.candidates = {
             <button class="btn btn-sm ${filter === '__all' ? 'btn-primary' : 'btn-ghost'}" onclick="app.modules.candidates.setFilter('__all')">全部</button>
             ${['餐饮','景点','住宿','交通','购物','娱乐','拍照','甜品','小吃','活动','其他'].map(c => `<button class="btn btn-sm ${filter === c ? 'btn-primary' : 'btn-ghost'}" onclick="app.modules.candidates.setFilter('${c}')">${c}</button>`).join('')}
           </div>
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <span class="text-sm text-slate-500">按日期筛选：</span>
+            <select id="candDateFilter" class="text-sm border border-slate-300 rounded px-2 py-1" onchange="app.modules.candidates.setDateFilter(this.value)">
+              <option value="__all" ${dateFilter === '__all' ? 'selected' : ''}>全部</option>
+              <option value="__none" ${dateFilter === '__none' ? 'selected' : ''}>未加入行程</option>
+              ${days.map((dy, i) => `<option value="${dy.id}" ${dateFilter === dy.id ? 'selected' : ''}>Day ${i + 1} · ${itinDateLabel(dy.date)}${dy.date ? ' ' + itinWeekdayLabel(dy.date) : ''}</option>`).join('')}
+            </select>
+          </div>
           ${view.length === 0 ? '<p class="text-sm text-slate-400">该分类下暂无行程</p>' : `
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             ${view.map(c => this.renderCard(c, placedMap[c.id])).join('')}
@@ -63,6 +77,22 @@ app.modules.candidates = {
   setFilter(f) {
     app.state.candFilter = f;
     app.renderAll();
+  },
+
+  /* 按日期筛选（全部 / 未加入行程 / 某个 Day） */
+  setDateFilter(f) {
+    app.state.candDateFilter = f;
+    app.renderAll();
+  },
+
+  /* 按日期筛选候选（在类型筛选之后调用）：全部 / 未加入行程 / 某个 Day。
+     依据 placedMap（候选当前落入的日期 dayIndex）判断。纯逻辑，可单测。 */
+  filterByDate(sorted, placedMap, dateFilter, days) {
+    if (!dateFilter || dateFilter === '__all') return sorted;
+    if (dateFilter === '__none') return sorted.filter(c => !placedMap[c.id]);
+    const idx = days.findIndex(dy => dy.id === dateFilter);
+    if (idx < 0) return sorted;
+    return sorted.filter(c => placedMap[c.id] && placedMap[c.id].days.some(x => x.dayIndex === idx));
   },
 
   /* 统计每个行程库项目落入的日期（按 sourceId 收集全部落点，支持「已加入 N 个日期」）。

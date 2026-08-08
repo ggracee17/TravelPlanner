@@ -66,10 +66,16 @@ app.modules.map = {
       <div class="card">
         <div class="card-title">
           <span>${app.t('map.title')}</span>
-          <div class="ml-auto flex items-center gap-2">
+          <div class="ml-auto flex items-center gap-3 flex-wrap">
             <select id="mapDaySel" class="text-sm border border-slate-300 rounded px-2 py-1" onchange="app.modules.map.rerender()">
               <option value="__all">${app.t('map.allDates')}</option>${sel}
             </select>
+            <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer select-none">
+              <input type="checkbox" ${app.state.mapShowUnjoined ? 'checked' : ''} onchange="app.state.mapShowUnjoined=this.checked;app.modules.map.rerender()" /> 显示未加入行程的地点
+            </label>
+            <label class="flex items-center gap-1 text-xs text-slate-600 cursor-pointer select-none">
+              <input type="checkbox" ${app.state.mapShowHidden ? 'checked' : ''} onchange="app.state.mapShowHidden=this.checked;app.modules.map.rerender()" /> 显示已隐藏
+            </label>
             <button class="btn btn-ghost btn-sm" onclick="app.modules.map.clearGeoCache()" title="${app.t('map.clearCacheTip')}">${app.t('map.clearCache')}</button>
           </div>
         </div>
@@ -98,18 +104,69 @@ app.modules.map = {
     return el ? el.value : '__all';
   },
 
-  /* 收集选中日期范围内的所有行程块（纯数据，可单测） */
+  /* 收集选中日期范围内的所有行程块（纯数据，可单测）。
+     - 默认排除 hidden 的地点；开启「显示已隐藏」(mapShowHidden) 时一并纳入（用于取消隐藏）。
+     - 开启「显示未加入行程的地点」(mapShowUnjoined) 且为「全部日期」视图时，并入
+       尚未排入时间轴的候选库地点（这些地点本身不在任何一天，仅在地图上临时展示）。 */
   collectSpots(dayId) {
     const d = app.getActiveDestination();
     if (!d) return [];
     const days = (app.state[d.id]?.itinerary || [])
       .slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const showHidden = !!app.state.mapShowHidden;
+    const showUnjoined = !!app.state.mapShowUnjoined;
     const out = [];
+    const seenSource = new Set();
     days.forEach((day, idx) => {
       if (dayId !== '__all' && day.id !== dayId) return;
-      (day.spots || []).forEach(s => out.push({ spot: s, dayIndex: idx, date: day.date }));
+      (day.spots || []).forEach(s => {
+        const hidden = !!s.hidden;
+        if (hidden && !showHidden) return;
+        if (s.sourceId) seenSource.add(s.sourceId);
+        out.push({ spot: s, dayIndex: idx, date: day.date, dayId: day.id, isCand: false, hidden });
+      });
     });
+    // 未加入行程表的候选地点（仅「全部日期」视图，避免与具体某天混淆）
+    if (showUnjoined && dayId === '__all') {
+      const cands = Array.isArray(app.state.candidates) ? app.state.candidates : [];
+      cands.forEach(c => {
+        const hidden = !!c.hidden;
+        if (hidden && !showHidden) return;
+        if (seenSource.has(c.id)) return; // 已作为行程块显示，跳过
+        out.push({ spot: this._candToSpot(c), dayIndex: -1, date: null, dayId: '', isCand: true, hidden });
+      });
+    }
     return out;
+  },
+
+  /* 候选库项目 → 地图用的 spot-like 对象（类型中文→英文 key，供 MAP_COLORS 取色） */
+  _candToSpot(c) {
+    const CN2EN = { '餐饮': 'restaurant', '景点': 'spot', '住宿': 'hotel', '交通': 'transport', '购物': 'shopping', '娱乐': 'entertainment', '拍照': 'photo', '甜品': 'dessert', '小吃': 'snack', '活动': 'activity', '其他': 'other' };
+    return {
+      id: c.id, name: c.name,
+      type: CN2EN[c.type] || 'other',
+      lat: c.lat, lng: c.lng,
+      mapUrl: c.mapUrl || '',
+      address: c.address || '',
+      startTime: '', sourceId: c.id
+    };
+  },
+
+  /* 手动隐藏 / 显示某个地点（仅作用于地图：不影响行程库与时间轴）。
+     行程块：翻转 day.spots[id].hidden；候选：翻转 candidate.hidden。 */
+  toggleHidden(dayId, spotId, isCand) {
+    if (isCand) {
+      const c = (app.state.candidates || []).find(x => x.id === spotId);
+      if (c) c.hidden = !c.hidden;
+    } else {
+      const d = app.getActiveDestination();
+      if (!d) return;
+      const day = (app.state[d.id]?.itinerary || []).find(x => x.id === dayId);
+      const sp = day && (day.spots || []).find(s => s.id === spotId);
+      if (sp) sp.hidden = !sp.hidden;
+    }
+    app.saveState();
+    this.rerender();
   },
 
   /* 动态加载 Google Maps JS API（仅需一次） */
@@ -194,10 +251,11 @@ app.modules.map = {
   async showMap() {
     const mode = this._sel();
     const items = this.collectSpots(mode);
+    const drawItems = items.filter(it => !it.hidden); // 隐藏的地点不绘制（仅在开启「显示已隐藏」时列在列表中供取消隐藏）
     if (!gmapsKey() || this._failed || typeof window === 'undefined' || !window.google || !window.google.maps) {
-      const located = items.filter(it => it.spot.lat != null && it.spot.lng != null);
+      const located = drawItems.filter(it => it.spot.lat != null && it.spot.lng != null);
       this.renderList(items, located, mode);
-      this._renderLegend(items, mode);
+      this._renderLegend(drawItems, mode);
       if (!gmapsKey()) this._noteNeedKey();
       else if (this._failed) this._noteMapFallback();
       return;
@@ -206,22 +264,26 @@ app.modules.map = {
     // 省 Credits 模式：跳过 Geocoding API 调用，只显示已有坐标的点（坐标来自手动填写或行程链接解析）。
     let needSave = false;
     if (!app.state.ecoMode) {
-      for (const it of items) {
+      for (const it of drawItems) {
         const s = it.spot;
         if (s.lat != null && s.lng != null) continue;            // 已有坐标，跳过
         const q = [s.name, s.address].filter(Boolean).join(' ').trim();
         if (!q) { if (!s._geoFailed) { s._geoFailed = true; needSave = true; } continue; } // 无名称/地址，无法定位
         if (s._geoFailed && s._geoFailQ === q) continue;          // 同一查询曾失败，本次跳过（省配额）
         const g = await this.geocodeCached(q);
-        if (g) { s.lat = g.lat; s.lng = g.lng; s._geoFailed = false; s._geoFailQ = ''; needSave = true; }
+        if (g) {
+          s.lat = g.lat; s.lng = g.lng;
+          if (it.isCand) { const c = (app.state.candidates || []).find(x => x.id === it.spot.id); if (c) { c.lat = g.lat; c.lng = g.lng; } } // 候选坐标回写，持久化
+          s._geoFailed = false; s._geoFailQ = ''; needSave = true;
+        }
         else { s._geoFailed = true; s._geoFailQ = q; needSave = true; } // 失败标记，下次同查询不再调用
       }
     }
     if (needSave) app.saveState();
-    const withCoord = items.filter(it => it.spot.lat != null && it.spot.lng != null);
+    const withCoord = drawItems.filter(it => it.spot.lat != null && it.spot.lng != null);
     this.renderList(items, withCoord, mode);
     await this.drawMap(withCoord, mode);
-    this._renderLegend(items, mode);
+    this._renderLegend(drawItems, mode);
   },
 
   /* 取色：全部日期按「第几天」，单日按「地点类别」 */
@@ -332,12 +394,17 @@ app.modules.map = {
       const hint = (!located && !s.mapUrl)
         ? `<div class="text-tiny text-amber-600 truncate">${app.t('map.unlocated')}</div>`
         : '';
-      return `<div class="p-2 rounded border border-slate-200 flex items-start gap-2 ${located ? '' : 'opacity-60'}">
+      // 仅地图范围内隐藏/显示：不影响行程库与时间轴
+      const hideBtn = it.hidden
+        ? `<button class="btn btn-ghost btn-sm shrink-0" onclick="app.modules.map.toggleHidden('${it.dayId}','${it.spot.id}',${it.isCand})">👁 显示</button>`
+        : `<button class="btn btn-ghost btn-sm shrink-0" onclick="app.modules.map.toggleHidden('${it.dayId}','${it.spot.id}',${it.isCand})">🙈 隐藏</button>`;
+      return `<div class="p-2 rounded border ${it.hidden ? 'border-slate-300 bg-slate-50' : 'border-slate-200'} flex items-start gap-2 ${located ? '' : 'opacity-60'}">
         <span style="width:10px;height:10px;border-radius:999px;background:${color};margin-top:5px;flex:none"></span>
-        <div class="min-w-0">
+        <div class="min-w-0 flex-1">
           <div class="truncate">${dayTag}${nameHtml} <span class="text-tiny text-slate-400">${s.startTime || ''}</span></div>
           ${hint}
         </div>
+        ${hideBtn}
       </div>`;
     }).join('') + `</div>`;
   },

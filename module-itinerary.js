@@ -861,17 +861,21 @@ app.modules.itinerary = {
   _schedFields(s, opts) {
     opts = opts || {};
     const daySel = opts.dayOptions
-      ? `<div class="form-field col-span-full"><label>📅 加入行程表的日期</label><select id="t_day">${opts.dayOptions}</select></div>`
+      ? `<div class="form-field col-span-full"><label>📅 加入行程表的日期</label><select id="t_day" onchange="app.modules.itinerary.onDayChange()">${opts.dayOptions}</select></div>`
       : '';
+    // 选中「暂不加入」时隐藏开始/结束时间（该候选不进时间轴，无需排时间）
+    const timeWrapCls = opts.showTime === false ? 'hidden' : '';
     return `
       ${daySel}
-      <div class="form-field">
-        <label>开始时间（24 小时制）</label>
-        <select id="t_start" onchange="app.modules.itinerary.onSchedChange('start')">${this.itinTimeOptions(s.startTime || '09:00', 5)}</select>
-      </div>
-      <div class="form-field">
-        <label>结束时间（24 小时制）</label>
-        <select id="t_end" onchange="app.modules.itinerary.onSchedChange('end')">${this.itinTimeOptions(s.endTime || '', 5)}</select>
+      <div id="schedTimeWrap" class="${timeWrapCls}">
+        <div class="form-field">
+          <label>开始时间（24 小时制）</label>
+          <select id="t_start" onchange="app.modules.itinerary.onSchedChange('start')">${this.itinTimeOptions(s.startTime || '09:00', 5)}</select>
+        </div>
+        <div class="form-field">
+          <label>结束时间（24 小时制）</label>
+          <select id="t_end" onchange="app.modules.itinerary.onSchedChange('end')">${this.itinTimeOptions(s.endTime || '', 5)}</select>
+        </div>
       </div>
       <div class="form-field"><label>门票(¥)</label><input type="number" id="t_ticket" min="0" value="${s.ticket || 0}" /></div>
       <div class="form-field"><label>是否需预约</label>
@@ -883,6 +887,14 @@ app.modules.itinerary = {
         </select>
       </div>
     `;
+  },
+
+  /* 加入行程表的日期改变时：选「暂不加入」（空值）则隐藏开始/结束时间字段 */
+  onDayChange() {
+    const dayEl = document.getElementById('t_day');
+    const wrap = document.getElementById('schedTimeWrap');
+    if (!dayEl || !wrap) return;
+    wrap.classList.toggle('hidden', !dayEl.value);
   },
 
   /* 行程块表单：开始 / 时长 / 结束时间 三者联动
@@ -912,7 +924,7 @@ app.modules.itinerary = {
 
   openTripForm(mode, a, b) {
     const cands = app.state.candidates || (app.state.candidates = []);
-    let cand = null, day = null, s = null, isNew = false;
+    let cand = null, day = null, s = null, isNew = false, placedDayId = '';
     let dayOptions = '';
 
     if (mode === 'spot') {
@@ -932,12 +944,15 @@ app.modules.itinerary = {
       if (d) {
         const days = (app.state[d.id]?.itinerary || []).slice().sort((x, y) => (x.date || '').localeCompare(y.date || ''));
         // 找到当前已加入的实例（用于预填日期/时间/门票）
-        let placed = null, placedDayId = '';
+        let placed = null;
         for (const dy of days) {
           const sp = (dy.spots || []).find(sp => sp.sourceId === a);
           if (sp) { placed = sp; placedDayId = dy.id; break; }
         }
-        dayOptions = days.map((dy, i) =>
+        // 顶部插入「暂不加入」选项（空值）：选中后该候选不进入任何一天的行程表，
+        // 且开始/结束时间字段隐藏（见 _schedFields 的 showTime 与 onDayChange）。
+        const unjoinedOpt = `<option value="">暂不加入</option>`;
+        dayOptions = unjoinedOpt + days.map((dy, i) =>
           `<option value="${dy.id}" ${dy.id === placedDayId ? 'selected' : ''}>Day ${i + 1} · ${itinDateLabel(dy.date)}${dy.date ? ' ' + itinWeekdayLabel(dy.date) : ''}</option>`
         ).join('');
         if (mode === 'cand') {
@@ -983,7 +998,7 @@ app.modules.itinerary = {
       }
     }
 
-    const sched = mode === 'spot' ? this._schedFields(s) : this._schedFields(s, { dayOptions });
+    const sched = mode === 'spot' ? this._schedFields(s) : this._schedFields(s, { dayOptions, showTime: placedDayId !== '' });
     app.openModal(titleMap[mode] || '编辑', `
       ${placedNote}
       <div class="form-grid cols-3">
@@ -1124,6 +1139,10 @@ app.modules.itinerary = {
             day.spots.sort((x, y) => itinTimeToNum(x.startTime) - itinTimeToNum(y.startTime));
             cand.checked = true;
           }
+        } else {
+          // 选「暂不加入」（dayId 为空）：移除旧实例并保持未加入状态，
+          // 这样编辑一个原本未加入的行程、且没改加入日期时，它依旧保持未加入
+          cand.checked = false;
         }
       }
     }
