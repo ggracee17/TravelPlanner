@@ -49,6 +49,15 @@ app.modules.expenses = {
     const remaining = budget - total;
     const pCls = pct >= 100 ? 'danger' : pct >= 80 ? 'warning' : '';
     const pColor = pct >= 100 ? '#b91c1c' : pct >= 80 ? '#ea580c' : '#10b981';
+    // 双币显示：把「台币值」同时标注澳币等价
+    const dualTwd = (twd) => `¥${Math.round(twd)} <span class="text-tiny text-slate-500">≈ A$${(twd / rate).toFixed(0)}</span>`;
+    // 双币显示：按原始币种展示，并标注另一币种等价（AUD↔TWD）
+    const dualAmt = (cur, amt) => {
+      const v = parseFloat(amt) || 0;
+      return cur === 'AUD'
+        ? `A$${v.toFixed(2)} <span class="text-tiny text-slate-500">≈ 台币 ¥${(v * rate).toFixed(0)}</span>`
+        : `¥${v.toFixed(2)} <span class="text-tiny text-slate-500">≈ A$${(v / rate).toFixed(0)}</span>`;
+    };
 
     // 按分类汇总（以台币计）
     const byCat = {};
@@ -106,7 +115,7 @@ app.modules.expenses = {
           ${budgets.length === 0 ? `
             <div class="text-sm text-slate-600">
               ${parseFloat(d.budget) > 0
-                ? `当前使用「整体总预算 ¥${(parseFloat(d.budget) || 0).toFixed(0)}」，可将其转为逐项预算：<button class="btn btn-ghost btn-sm ml-2" onclick="app.modules.expenses.migrateLegacyBudget()">${app.t('expense.budgetMigrate')}</button>`
+                ? `当前使用「整体总预算 ¥${(parseFloat(d.budget) || 0).toFixed(0)}（≈ A$${(parseFloat(d.budget) / rate).toFixed(0)}）」，可将其转为逐项预算：<button class="btn btn-ghost btn-sm ml-2" onclick="app.modules.expenses.migrateLegacyBudget()">${app.t('expense.budgetMigrate')}</button>`
                 : `📝 ${app.t('expense.budgetEmpty')} — ${app.t('expense.budgetNoItem')}`}
             </div>
           ` : `
@@ -118,7 +127,7 @@ app.modules.expenses = {
                     <tr>
                       <td>${b.name || '-'}</td>
                       <td>${b.currency === 'AUD' ? '澳币 (A$)' : '台币 (NT$)'}</td>
-                      <td class="font-semibold">${b.currency === 'AUD' ? 'A$' : '¥'}${(parseFloat(b.amount) || 0).toFixed(2)}</td>
+                      <td class="font-semibold">${dualAmt(b.currency, b.amount)}</td>
                       <td><span class="badge ${b.priceType === 'total' ? 'badge-other' : 'badge-hotel'}">${b.priceType === 'total' ? '总价' : '单人'}</span></td>
                       <td class="text-slate-600">¥${bTwdOf(b).toFixed(0)} <span class="text-tiny text-slate-500">≈ A$${(bTwdOf(b) / rate).toFixed(0)}</span></td>
                       <td>
@@ -144,17 +153,17 @@ app.modules.expenses = {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
           <div class="p-4 bg-gradient-to-br from-sky-50 to-sky-100 rounded-lg border border-sky-200">
             <div class="text-xs text-sky-700 font-semibold">💰 总预算（${travelers} 人）</div>
-            <div class="text-2xl font-bold text-sky-800">¥${budget.toFixed(0)}</div>
-            <div class="text-xs text-sky-600 mt-0.5">≈ A$${(budget / rate).toFixed(0)}　·　每人 ¥${(budget / travelers).toFixed(0)} ≈ A$${(budget / travelers / rate).toFixed(0)}</div>
+            <div class="text-2xl font-bold text-sky-800">¥${budget.toFixed(0)} <span class="text-base font-semibold text-sky-600">≈ A$${(budget / rate).toFixed(0)}</span></div>
+            <div class="text-xs text-sky-600 mt-0.5">每人 ¥${(budget / travelers).toFixed(0)} ≈ A$${(budget / travelers / rate).toFixed(0)}</div>
           </div>
           <div class="p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg border border-orange-200">
             <div class="text-xs text-orange-700 font-semibold">📊 已支出（${travelers} 人）</div>
-            <div class="text-2xl font-bold text-orange-800">¥${total.toFixed(0)}</div>
+            <div class="text-2xl font-bold text-orange-800">¥${total.toFixed(0)} <span class="text-base font-semibold text-orange-600">≈ A$${(total / rate).toFixed(0)}</span></div>
             <div class="text-xs text-orange-600 mt-0.5">每人 ¥${(total / travelers).toFixed(0)} ≈ A$${(total / travelers / rate).toFixed(0)}</div>
           </div>
           <div class="p-4 rounded-lg border" style="${remaining >= 0 ? 'background:#ecfdf5;border-color:#a7f3d0;' : 'background:#fef2f2;border-color:#fecaca;'}">
             <div class="text-xs font-semibold" style="color:${remaining >= 0 ? '#047857' : '#b91c1c'}">${remaining >= 0 ? '💵 剩余预算' : '⚠️ 超支金额'}</div>
-            <div class="text-2xl font-bold" style="color:${remaining >= 0 ? '#065f46' : '#991b1b'}">¥${Math.abs(remaining).toFixed(0)}</div>
+            <div class="text-2xl font-bold" style="color:${remaining >= 0 ? '#065f46' : '#991b1b'}">¥${Math.abs(remaining).toFixed(0)} <span class="text-base font-semibold" style="color:${remaining >= 0 ? '#047857' : '#b91c1c'}">≈ A$${(Math.abs(remaining) / rate).toFixed(0)}</span></div>
           </div>
           <div class="p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg border border-indigo-200">
             <div class="text-xs text-indigo-700 font-semibold">📈 预算占用</div>
@@ -166,7 +175,7 @@ app.modules.expenses = {
           <div class="budget-bar-fill ${pCls}" style="width:${Math.min(100, pct)}%"></div>
         </div>
         ${pct >= 80 && pct < 100 ? '<div class="p-3 bg-amber-50 border border-amber-200 rounded mb-3 text-sm">⚠️ <strong>提醒：</strong>预算已使用 ${pct.toFixed(0)}%，请注意控制消费。</div>' : ''}
-        ${pct >= 100 ? '<div class="p-3 bg-red-50 border border-red-200 rounded mb-3 text-sm">🚨 <strong>超支警告：</strong>已超出预算 ¥${(-remaining).toFixed(0)}，建议减少非必要消费。</div>' : ''}
+        ${pct >= 100 ? `<div class="p-3 bg-red-50 border border-red-200 rounded mb-3 text-sm">🚨 <strong>超支警告：</strong>已超出预算 ¥${(-remaining).toFixed(0)}（≈ A${(-remaining / rate).toFixed(0)}），建议减少非必要消费。</div>` : ''}
 
         <!-- 分类汇总 -->
         ${expenses.length > 0 ? `
@@ -175,7 +184,7 @@ app.modules.expenses = {
             ${Object.entries(byCat).map(([cat, amt]) => `
               <div class="p-3 rounded-lg border" style="background:${catColors[cat]}15; border-color:${catColors[cat]}40">
                 <div class="text-xs" style="color:${catColors[cat]}">${catLabels[cat] || '📌'} ${cat}</div>
-                <div class="text-lg font-bold" style="color:${catColors[cat]}">¥${amt.toFixed(0)}</div>
+                <div class="text-lg font-bold" style="color:${catColors[cat]}">¥${amt.toFixed(0)} <span class="text-tiny font-normal" style="color:${catColors[cat]}">≈ A$${(amt / rate).toFixed(0)}</span></div>
                 <div class="text-tiny text-slate-500">${((amt/total)*100).toFixed(1)}%</div>
               </div>
             `).join('')}
@@ -216,7 +225,7 @@ app.modules.expenses = {
               <tfoot>
                 <tr style="background:#f1f5f9;font-weight:600">
                   <td colspan="3" class="text-right">合计（台币 · ${travelers} 人）</td>
-                  <td>¥${total.toFixed(2)} <span class="text-tiny text-slate-500">每人 ¥${(total / travelers).toFixed(0)}</span></td>
+                  <td>¥${total.toFixed(2)} <span class="text-tiny text-slate-500">≈ A$${(total / rate).toFixed(0)}　·　每人 ¥${(total / travelers).toFixed(0)} ≈ A$${(total / travelers / rate).toFixed(0)}</span></td>
                   <td colspan="4"></td>
                 </tr>
               </tfoot>
@@ -555,12 +564,13 @@ app.modules.expenses = {
   checkBudget() {
     const d = app.getActiveDestination();
     if (!d) return;
+    const rate = parseFloat(d.audToTwd) || 21;
     const total = app.getExpensesTotal(d.id);
     const budget = app.getBudgetTotal(d.id);
     if (budget > 0) {
       const pct = (total / budget) * 100;
       if (pct >= 100) {
-        app.toast(`🚨 预算已超！当前已花 ¥${total.toFixed(0)}，超出预算 ¥${(total - budget).toFixed(0)}`, 'error', 6000);
+        app.toast(`🚨 预算已超！当前已花 ¥${total.toFixed(0)}（≈ A$${(total / rate).toFixed(0)}），超出预算 ¥${(total - budget).toFixed(0)}（≈ A${((total - budget) / rate).toFixed(0)}）`, 'error', 6000);
       } else if (pct >= 80) {
         app.toast(`⚠️ 预算使用已达 ${pct.toFixed(0)}%，请注意控制`, 'warning', 5000);
       }
