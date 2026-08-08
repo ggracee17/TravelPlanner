@@ -15,7 +15,8 @@ const app = {
     activeDestinationId: null, // 当前选中的目的地
     checklists: {
       documents: [],          // 证件清单
-      luggage: []             // 行李清单
+      luggage: [],            // 行李清单
+      todos: []               // 待办事项（名称 + 详情 + 完成勾选）
     },
     searchHistory: []         // 全网检索历史
   },
@@ -530,10 +531,11 @@ const app = {
         s[k] = (typeof s[k] === 'object') ? Object.values(s[k]) : [];
       }
     });
-    if (!s.checklists || typeof s.checklists !== 'object') s.checklists = { documents: [], luggage: [] };
+    if (!s.checklists || typeof s.checklists !== 'object') s.checklists = { documents: [], luggage: [], todos: [] };
     else {
       if (!Array.isArray(s.checklists.documents)) s.checklists.documents = (s.checklists.documents && typeof s.checklists.documents === 'object') ? Object.values(s.checklists.documents) : [];
       if (!Array.isArray(s.checklists.luggage)) s.checklists.luggage = (s.checklists.luggage && typeof s.checklists.luggage === 'object') ? Object.values(s.checklists.luggage) : [];
+      if (!Array.isArray(s.checklists.todos)) s.checklists.todos = (s.checklists.todos && typeof s.checklists.todos === 'object') ? Object.values(s.checklists.todos) : [];
     }
     return s;
   },
@@ -815,6 +817,7 @@ const app = {
             if (k === 'checklists') {
               this.state.checklists.documents = [...(this.state.checklists.documents || []), ...(data.checklists?.documents || [])];
               this.state.checklists.luggage = [...(this.state.checklists.luggage || []), ...(data.checklists?.luggage || [])];
+              this.state.checklists.todos = [...(this.state.checklists.todos || []), ...(data.checklists?.todos || [])];
             } else {
               const cur = this.state[k], inc = data[k];
               // candidates / searchHistory 等顶层数组：按 id 去重追加，绝不能当对象 spread（否则 .map 会崩）
@@ -888,7 +891,7 @@ const app = {
     this.state = {
       destinations: [],
       activeDestinationId: null,
-      checklists: { documents: [], luggage: [] },
+      checklists: { documents: [], luggage: [], todos: [] },
       searchHistory: []
     };
     this.saveState();

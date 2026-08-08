@@ -61,7 +61,8 @@ const DEFAULT_LUG = [
 
 // 在 app.init() 的 loadState() 之后调用：仅当清单为空才用默认值填充，绝不覆盖用户已保存的行程数据
 app.ensureChecklists = function () {
-  if (!this.state.checklists) this.state.checklists = { documents: [], luggage: [] };
+  if (!this.state.checklists) this.state.checklists = { documents: [], luggage: [], todos: [] };
+  if (!Array.isArray(this.state.checklists.todos)) this.state.checklists.todos = [];
   if (this.state.checklists.documents.length === 0) {
     this.state.checklists.documents = DEFAULT_DOCS.map(x => ({ ...x }));
   }
@@ -77,8 +78,10 @@ app.modules.checklists = {
     if (!sec) return;
     const docs = app.state.checklists.documents || [];
     const lug = app.state.checklists.luggage || [];
+    const todos = app.state.checklists.todos || [];
     const docsChecked = docs.filter(x => x.checked).length;
     const lugChecked = lug.filter(x => x.checked).length;
+    const todoDone = todos.filter(x => x.done).length;
     // 乱码自检：若清单项名称含替换字符 U+FFFD（典型表现：括号前出现一堆 □），提示一键重置清理
     const hasMojibake = [...docs, ...lug].some(x => x.name && x.name.indexOf('\uFFFD') >= 0);
     if (hasMojibake && !this._warnedMojibake) {
@@ -127,6 +130,35 @@ app.modules.checklists = {
         </div>
         <p class="text-tiny text-slate-500 mb-2">已按品类分组：衣物 / 洗护 / 电子设备 / 药品 / 随身杂物</p>
         ${this.renderLugByCategory(lug)}
+      </div>
+
+      <!-- 待办事项 -->
+      <div class="card">
+        <div class="card-title">
+          <span>📋 ${app.t('todo.title')}（${app.t('checklist.checked')} ${todoDone} / ${todos.length}）</span>
+          <div class="ml-auto flex gap-2">
+            <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addTodo()">${app.t('todo.add')}</button>
+          </div>
+        </div>
+        ${todos.length === 0 ? '<p class="text-sm text-slate-400 mt-2">还没有待办事项，点「➕ 添加待办」记录需要办的事。</p>' : `
+          <div id="todoList">
+            ${todos.map(t => this.renderTodoItem(t)).join('')}
+          </div>
+        `}
+      </div>
+    `;
+  },
+
+  renderTodoItem(t) {
+    return `
+      <div class="checklist-item ${t.done ? 'checked' : ''}" data-todo-id="${t.id}">
+        <input type="checkbox" ${t.done ? 'checked' : ''} onchange="app.modules.checklists.toggleTodo('${t.id}', this.checked)" />
+        <div class="flex-1 min-w-0">
+          <div class="font-medium ${t.done ? 'line-through text-slate-400' : ''}">${app._esc(t.name)}</div>
+          ${t.detail ? `<div class="text-tiny text-slate-500 mt-0.5 whitespace-pre-wrap break-words">${app._esc(t.detail)}</div>` : ''}
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="app.modules.checklists.editTodo('${t.id}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="app.modules.checklists.removeTodo('${t.id}')">🗑️</button>
       </div>
     `;
   },
@@ -244,6 +276,75 @@ app.modules.checklists = {
     this.render();
   },
 
+  /* ===== 待办事项：名称 + 详情 + 完成勾选 ===== */
+  addTodo() {
+    this.openTodoEdit(null);
+  },
+
+  editTodo(id) {
+    const item = app.state.checklists.todos.find(x => x.id === id);
+    if (!item) return;
+    this.openTodoEdit(item);
+  },
+
+  openTodoEdit(item) {
+    const isNew = !item;
+    item = item || { name: '', detail: '', done: false };
+    const html = `
+      <div class="form-grid">
+        <div class="form-field col-span-full"><label>待办名称 <span class="req">*</span></label><input id="td_name" value="${app._esc(item.name)}" placeholder="如：预约博物馆门票" /></div>
+        <div class="form-field col-span-full"><label>详情</label><textarea id="td_detail" rows="3" placeholder="如：需提前 3 天官网预约，带护照">${app._esc(item.detail || '')}</textarea></div>
+        <div class="form-field col-span-full">
+          <label><input type="checkbox" id="td_done" ${item.done ? 'checked' : ''} /> 标记为已完成</label>
+        </div>
+      </div>
+    `;
+    app.openModal(isNew ? '➕ 新增待办事项' : '✏️ 编辑待办事项', html, [
+      { text: '取消', class: 'btn btn-ghost', action: 'app.closeModal()' },
+      { text: '保存', class: 'btn btn-primary', action: `app.modules.checklists.saveTodo('${item.id || ''}')` }
+    ]);
+  },
+
+  saveTodo(id) {
+    const name = document.getElementById('td_name').value.trim();
+    if (!name) return app.toast('请填写待办名称', 'warning');
+    const data = {
+      name,
+      detail: document.getElementById('td_detail').value.trim(),
+      done: document.getElementById('td_done')?.checked || false
+    };
+    if (id) {
+      const idx = app.state.checklists.todos.findIndex(x => x.id === id);
+      if (idx >= 0) app.state.checklists.todos[idx] = { ...app.state.checklists.todos[idx], ...data };
+    } else {
+      app.state.checklists.todos.push({ id: 'td_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), ...data });
+    }
+    app.saveState();
+    app.closeModal();
+    this.render();
+    app.toast('已保存', 'success');
+  },
+
+  toggleTodo(id, done) {
+    const item = app.state.checklists.todos.find(x => x.id === id);
+    if (!item) return;
+    item.done = done;
+    app.saveState();
+    const row = document.querySelector(`[data-todo-id="${id}"]`);
+    if (row) {
+      row.classList.toggle('checked', done);
+      const nameEl = row.querySelector('.font-medium');
+      if (nameEl) nameEl.classList.toggle('line-through', done), nameEl.classList.toggle('text-slate-400', done);
+    }
+  },
+
+  removeTodo(id) {
+    if (!confirm('确定删除该待办事项？')) return;
+    app.state.checklists.todos = app.state.checklists.todos.filter(x => x.id !== id);
+    app.saveState();
+    this.render();
+  },
+
   reset() {
     if (!confirm('确定删除当前全部清单并恢复「初始默认清单」？此操作不可撤销。')) return;
     // 直接以源码里的干净默认值覆盖（无论当前是否为空/是否含乱码），保存即把损坏数据清掉。
@@ -284,11 +385,13 @@ app.modules.checklists = {
   exportXlsx() {
     const docs = app.state.checklists.documents.map(x => ({ 项目: x.name, 必带: x.required ? '是' : '否', 已勾选: x.checked ? '✓' : '□' }));
     const lug = app.state.checklists.luggage.map(x => ({ 分类: x.cat, 项目: x.name, 已勾选: x.checked ? '✓' : '□' }));
-    if (typeof XLSX === 'undefined') { app.downloadCSV(`travel_checklist_${new Date().toISOString().slice(0,10)}.csv`, [...docs, ...lug]); return; }
+    const todos = (app.state.checklists.todos || []).map(x => ({ 待办: x.name, 详情: x.detail || '', 已完成: x.done ? '✓' : '□' }));
+    if (typeof XLSX === 'undefined') { app.downloadCSV(`travel_checklist_${new Date().toISOString().slice(0,10)}.csv`, [...docs, ...lug, ...todos]); return; }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(docs), '证件手续清单');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lug), '行李打包清单');
+    if (todos.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(todos), '待办事项');
     XLSX.writeFile(wb, `travel_checklist_${new Date().toISOString().slice(0,10)}.xlsx`);
-    app.toast('已导出两份清单为 Excel', 'success');
+    app.toast('已导出清单为 Excel', 'success');
   }
 };

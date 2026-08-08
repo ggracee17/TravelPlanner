@@ -168,6 +168,10 @@ table.data-table tr:hover td { background: #f8fafc; }
 .badge-transport{ background: #cffafe; color: #155e75; }
 .badge-shop     { background: #fef3c7; color: #92400e; }
 .badge-other    { background: #e2e8f0; color: #475569; }
+.badge-entertainment { background: #eef2ff; color: #4338ca; }
+.badge-photo     { background: #ccfbf1; color: #115e59; }
+.badge-dessert   { background: #fce7f3; color: #9d174d; }
+.badge-snack     { background: #ffedd5; color: #9a3412; }
 .badge-cand     { background: #d1fae5; color: #065f46; font-size: 0.65rem; padding: 0.05rem 0.4rem; }
 
 /* ===== 备选行程库卡片 ===== */
@@ -475,6 +479,10 @@ table.data-table tr:hover td { background: #f8fafc; }
 .blk-spot       .tl-block-cat-v { color:#3b82f6; background: rgba(59,130,246,.14); }
 .blk-transport  .tl-block-cat-v { color:#0891b2; background: rgba(8,145,178,.14); }
 .blk-shopping   .tl-block-cat-v { color:#ea580c; background: rgba(234,88,12,.14); }
+.blk-entertainment .tl-block-cat-v { color:#6366f1; background: rgba(99,102,241,.14); }
+.blk-photo      .tl-block-cat-v { color:#0d9488; background: rgba(13,148,136,.14); }
+.blk-dessert    .tl-block-cat-v { color:#d946ef; background: rgba(217,70,239,.14); }
+.blk-snack      .tl-block-cat-v { color:#f97316; background: rgba(249,115,22,.14); }
 .blk-other      .tl-block-cat-v { color:#475569; background: rgba(71,85,105,.14); }
 /* 短行程块（<1h / <0.5h）精简显示，避免文字被截断 */
 .tl-short { padding: 3px 7px 3px 4px; }
@@ -495,6 +503,10 @@ table.data-table tr:hover td { background: #f8fafc; }
 .blk-spot       { background: #eff6ff; border-left-color: #3b82f6; }
 .blk-transport  { background: #ecfeff; border-left-color: #06b6d4; }
 .blk-shopping   { background: #fff7ed; border-left-color: #f97316; }
+.blk-entertainment { background: #eef2ff; border-left-color: #6366f1; }
+.blk-photo      { background: #f0fdfa; border-left-color: #0d9488; }
+.blk-dessert    { background: #fdf4ff; border-left-color: #d946ef; }
+.blk-snack      { background: #fff7ed; border-left-color: #f97316; }
 .blk-other      { background: #f8fafc; border-left-color: #64748b; }
 
 /* 旧版 酒店/餐饮 简述（非时间块） */

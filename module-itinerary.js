@@ -23,11 +23,15 @@ const ITIN_TYPES = {
   spot:       { label: '景点', cls: 'blk-spot' },
   transport:  { label: '交通', cls: 'blk-transport' },
   shopping:   { label: '购物', cls: 'blk-shopping' },
+  entertainment: { label: '娱乐', cls: 'blk-entertainment' },
+  photo:      { label: '拍照', cls: 'blk-photo' },
+  dessert:    { label: '甜品', cls: 'blk-dessert' },
+  snack:      { label: '小吃', cls: 'blk-snack' },
   other:      { label: '其他', cls: 'blk-other' }
 };
 
 // 行程库(中文类型) ↔ 行程块(英文 key) 映射
-const ITIN_KEY_TO_CN = { restaurant: '餐厅', spot: '景点', hotel: '住宿', transport: '交通', shopping: '购物', other: '其他' };
+const ITIN_KEY_TO_CN = { restaurant: '餐厅', spot: '景点', hotel: '住宿', transport: '交通', shopping: '购物', entertainment: '娱乐', photo: '拍照', dessert: '甜品', snack: '小吃', other: '其他' };
 
 /* 从 Google Maps 链接里离线解析经纬度（零 credits，不调 API）。
    支持的格式：
@@ -50,7 +54,7 @@ function extractCoordsFromMapUrl(url) {
   if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
   return null;
 }
-const CN_TO_ITIN_KEY = { '餐厅': 'restaurant', '景点': 'spot', '住宿': 'hotel', '交通': 'transport', '购物': 'shopping', '其他': 'other' };
+const CN_TO_ITIN_KEY = { '餐厅': 'restaurant', '景点': 'spot', '住宿': 'hotel', '交通': 'transport', '购物': 'shopping', '娱乐': 'entertainment', '拍照': 'photo', '甜品': 'dessert', '小吃': 'snack', '其他': 'other' };
 
 function itinTimeToNum(t) {
   if (!t || !/^\d{1,2}(:\d{2})?$/.test(t)) return ITIN_TL_START;
@@ -81,6 +85,16 @@ function itinWeekdayIndex(dateStr) {
   const dt = new Date(y, m - 1, d);
   if (isNaN(dt.getTime())) return null;
   return dt.getDay(); // 0=周日 … 6=周六
+}
+// 日期显示：紧凑视图下隐藏年份，仅显示 月-日（如 08-09）；普通视图显示完整 YYYY-MM-DD
+function itinDateLabel(dateStr) {
+  if (!dateStr) return '未填日期';
+  const compact = (typeof app !== 'undefined' && app.state && app.state.itineraryZoom) === 'compact';
+  if (compact) {
+    const p = String(dateStr).split('-');
+    if (p.length === 3) return p[1] + '-' + p[2];
+  }
+  return dateStr;
 }
 
 app.modules.itinerary = {
@@ -184,7 +198,7 @@ app.modules.itinerary = {
       <div class="day-card">
         <div class="day-card-header">
           <div>
-            <div class="text-lg font-bold">Day ${idx + 1} · ${day.date || '未填日期'}${day.date ? ` <span class="day-weekday">${itinWeekdayLabel(day.date)}</span>` : ''}</div>
+            <div class="text-lg font-bold">Day ${idx + 1} · ${itinDateLabel(day.date)}${day.date ? ` <span class="day-weekday">${itinWeekdayLabel(day.date)}</span>` : ''}</div>
             <div class="text-xs opacity-90">${day.weather || '天气未填'}　·　行程块 ${spots.length} 个　·　门票 ¥${totalTicket.toFixed(0)}</div>
           </div>
           <div class="flex gap-2">
@@ -880,7 +894,7 @@ app.modules.itinerary = {
           if (sp) { placed = sp; placedDayId = dy.id; break; }
         }
         dayOptions = days.map((dy, i) =>
-          `<option value="${dy.id}" ${dy.id === placedDayId ? 'selected' : ''}>Day ${i + 1} · ${dy.date || '未填日期'}${dy.date ? ' ' + itinWeekdayLabel(dy.date) : ''}</option>`
+          `<option value="${dy.id}" ${dy.id === placedDayId ? 'selected' : ''}>Day ${i + 1} · ${itinDateLabel(dy.date)}${dy.date ? ' ' + itinWeekdayLabel(dy.date) : ''}</option>`
         ).join('');
         if (mode === 'cand') {
           cand = cands.find(x => x.id === a);
@@ -1144,7 +1158,7 @@ app.modules.itinerary = {
       dy.id === dayId ? '' :
       `<label class="flex items-center gap-2 p-2 rounded border border-slate-200 mb-1 cursor-pointer">
         <input type="checkbox" class="copy-day-cb" value="${dy.id}" checked />
-        <span>Day ${i + 1} · ${dy.date || '未填日期'}</span>
+        <span>Day ${i + 1} · ${itinDateLabel(dy.date)}</span>
       </label>`
     ).join('');
     if (!opts) return app.toast('没有其他日期可复制', 'warning');

@@ -48,7 +48,7 @@ app.modules.candidates = {
         ` : `
           <div class="flex flex-wrap gap-2 mb-3">
             <button class="btn btn-sm ${filter === '__all' ? 'btn-primary' : 'btn-ghost'}" onclick="app.modules.candidates.setFilter('__all')">全部</button>
-            ${['餐厅','景点','住宿','交通','购物','其他'].map(c => `<button class="btn btn-sm ${filter === c ? 'btn-primary' : 'btn-ghost'}" onclick="app.modules.candidates.setFilter('${c}')">${c}</button>`).join('')}
+            ${['餐厅','景点','住宿','交通','购物','娱乐','拍照','甜品','小吃','其他'].map(c => `<button class="btn btn-sm ${filter === c ? 'btn-primary' : 'btn-ghost'}" onclick="app.modules.candidates.setFilter('${c}')">${c}</button>`).join('')}
           </div>
           ${view.length === 0 ? '<p class="text-sm text-slate-400">该分类下暂无行程</p>' : `
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -108,7 +108,9 @@ app.modules.candidates = {
   renderCard(c, placed) {
     const typeBadge = {
       '餐厅': 'badge badge-restaurant', '景点': 'badge badge-spot', '住宿': 'badge badge-hotel',
-      '交通': 'badge badge-transport', '购物': 'badge badge-shop', '其他': 'badge badge-other'
+      '交通': 'badge badge-transport', '购物': 'badge badge-shop',
+      '娱乐': 'badge badge-entertainment', '拍照': 'badge badge-photo', '甜品': 'badge badge-dessert', '小吃': 'badge badge-snack',
+      '其他': 'badge badge-other'
     }[c.type] || 'badge badge-other';
 
     const placedText = !placed || placed.count === 0
@@ -178,7 +180,7 @@ app.modules.candidates = {
       return false;
     }
     if (!firstDay.spots) firstDay.spots = [];
-    const TYPE_KEY = { '餐厅': 'restaurant', '景点': 'spot', '住宿': 'hotel', '交通': 'transport', '购物': 'shopping', '其他': 'other' };
+    const TYPE_KEY = { '餐厅': 'restaurant', '景点': 'spot', '住宿': 'hotel', '交通': 'transport', '购物': 'shopping', '娱乐': 'entertainment', '拍照': 'photo', '甜品': 'dessert', '小吃': 'snack', '其他': 'other' };
     const durH = c.durationH || 2;
     const start = app.modules.itinerary.defaultStart(firstDay, durH);
     firstDay.spots.push({
