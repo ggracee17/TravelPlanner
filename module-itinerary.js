@@ -165,7 +165,14 @@ app.modules.itinerary = {
       </div>`;
         // 默认把每条时间轴滚动到「6:00–00:00」区段（即最大滚动值）：因为大部分行程在 6:00 之后，
     // 这样默认就停在常用区间，免去每次手动拖到最底；向上滚动仍可看到 6:00 之前的凌晨行程。
-    try { sec.querySelectorAll('.timeline').forEach(tl => { tl.scrollTop = tl.scrollHeight - tl.clientHeight; }); } catch (_) {}
+    // 使用显式默认滚动偏移（data-default-scroll = 6h），不依赖 scrollHeight 求值，真实浏览器中更稳定。
+    try {
+      sec.querySelectorAll('.timeline').forEach(tl => {
+        const target = parseFloat(tl.getAttribute('data-default-scroll')) || 0;
+        const max = tl.scrollHeight - tl.clientHeight;
+        tl.scrollTop = max > 0 ? Math.min(target, max) : target;
+      });
+    } catch (_) {}
   },
 
   toggleZoom() {

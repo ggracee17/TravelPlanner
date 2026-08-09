@@ -55,7 +55,7 @@ assert(itin.defaultStart({ spots: [{ startTime: '23:00', durationH: 2 }] }, 2) =
 
 console.log('\n[2) 时间轴默认停在 6:00–00:00（最大滚动值，常用行程区间）]');
 const itinSrc = fs.readFileSync(path.join(ROOT, 'module-itinerary.js'), 'utf8');
-assert(/querySelectorAll\('\.timeline'\)\.forEach\(tl => \{\s*tl\.scrollTop = tl\.scrollHeight - tl\.clientHeight;/.test(itinSrc), 'render 把 timeline 默认滚到最大（显示 6:00–00:00 常用区间）');
+assert(/querySelectorAll\('\.timeline'\)\.forEach\(tl => \{\s*const target = parseFloat\(tl\.getAttribute\('data-default-scroll'\)\)[\s\S]*tl\.scrollTop =/.test(itinSrc), 'render 把 timeline 默认滚到 6:00–00:00 常用区间（用显式 data-default-scroll 偏移，不依赖 scrollHeight 求值）');
 assert(!/tl\.scrollTop = 0;/.test(itinSrc.replace(/\s+/g, ' ')), '不再默认停在顶部（00:00）');
 
 console.log('\n[3) 拖拽硬化：drop 失败也清空 _drag]');
