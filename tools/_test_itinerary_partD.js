@@ -102,5 +102,13 @@ const itinSrc2 = fs.readFileSync(path.join(ROOT, 'module-itinerary.js'), 'utf8')
 assert(/const applyDefaultScroll = \(\) =>/.test(itinSrc2), 'render 抽出 applyDefaultScroll 函数包裹滚动逻辑');
 assert(/requestAnimationFrame\(\(\) => requestAnimationFrame\(applyDefaultScroll\)\)/.test(itinSrc2), 'render 用双重 requestAnimationFrame 等布局就绪后再设 scrollTop（修复刷新后停在 0:00）');
 
+console.log('\n[7) 当日备注显示在天气之前]');
+const dayHtml = itin.renderDayColumn({ id: 'dayX', date: '2026-01-01', weather: '晴 22-30℃', notes: '记得带伞', spots: [] }, 0, { name: '台北', id: 'destX' }, false);
+assert(/📝 记得带伞/.test(dayHtml), '有当日备注时副标题显示备注标记');
+assert(dayHtml.indexOf('记得带伞') < dayHtml.indexOf('晴'), '当日备注显示在天气之前（备注在前）');
+const dayHtml2 = itin.renderDayColumn({ id: 'dayY', date: '2026-01-02', weather: '多云', notes: '', spots: [] }, 0, { name: '台北', id: 'destX' }, false);
+assert(!/📝/.test(dayHtml2), '无当日备注时不显示备注标记');
+assert(dayHtml2.indexOf('多云') > -1 && dayHtml2.indexOf('多云') < dayHtml2.indexOf('门票'), '无备注时天气仍在门票之前（结构不变）');
+
 console.log('\n===== 结果: ' + (failed === 0 ? '全部通过 (' + passed + ')' : failed + ' 项失败') + ' =====');
 process.exit(failed === 0 ? 0 : 1);

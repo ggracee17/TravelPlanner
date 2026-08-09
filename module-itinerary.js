@@ -227,7 +227,7 @@ app.modules.itinerary = {
         <div class="day-card-header">
           <div>
             <div class="text-lg font-bold">Day ${idx + 1} · ${itinDateLabel(day.date)}${day.date ? ` <span class="day-weekday">${itinWeekdayLabel(day.date)}</span>` : ''}</div>
-            <div class="text-xs opacity-90">${day.weather || '天气未填'}　·　门票 ¥${totalTicket.toFixed(0)}</div>
+            <div class="text-xs opacity-90">${day.notes ? '📝 ' + day.notes + '　·　' : ''}${day.weather || '天气未填'}　·　门票 ¥${totalTicket.toFixed(0)}</div>
           </div>
           <div class="flex gap-2">
             <button class="btn btn-ghost btn-sm" onclick="app.modules.itinerary.computeTravel('${day.id}')" title="用 Google 计算相邻行程点之间的交通时间（按顶部所选交通方式）">${app.t('itinerary.travelTime')}</button>
