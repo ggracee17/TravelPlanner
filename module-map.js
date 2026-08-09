@@ -99,6 +99,11 @@ app.modules.map = {
     this.ensureMaps(() => this.showMap());
   },
 
+  // 关闭当前打开的地图信息弹窗（如点「隐藏」后让弹窗自动收起）
+  closeInfo() {
+    try { if (this._lastInfo) this._lastInfo.close(); } catch (e) {}
+  },
+
   _sel() {
     const el = document.getElementById('mapDaySel');
     return el ? el.value : '__all';
@@ -368,11 +373,19 @@ app.modules.map = {
         marker = new gm.Marker({ position: pos, map, title: s.name || '地点', icon: this._pin(color) });
       }
       const dayPrefix = (mode === '__all' && it.dayIndex >= 0) ? ('Day ' + (it.dayIndex + 1) + ' ') : '';
-      const content = `<div style="min-width:170px"><strong>${this._esc(s.name)}</strong>` +
-        `<br><span style="font-size:.7rem;color:#64748b">${dayPrefix}${s.startTime || ''}</span>` +
-        (this._mapsUrl(s) ? `<br><a href="${this._mapsUrl(s)}" target="_blank" rel="noopener">🔗 在 Google Maps 打开</a>` : '') +
+      const dtText = it.isCand ? '（未加入行程）' : [it.date, s.startTime].filter(Boolean).join(' ');
+      const detailCall = `app.modules.itinerary.openTripForm('${it.isCand ? 'cand' : 'spot'}','${it.isCand ? it.spot.id : it.dayId}','${it.spot.id}')`;
+      const content = `<div style="min-width:190px;max-width:240px">` +
+        `<strong>${this._esc(s.name)}</strong>` +
+        `<div style="font-size:.72rem;color:#64748b;margin-top:2px">${dayPrefix}${this._esc(dtText)}</div>` +
+        `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">` +
+          `<button class="btn btn-ghost btn-sm" onclick="${detailCall}">📝 行程详情</button>` +
+          `<button class="btn btn-ghost btn-sm" onclick="app.modules.map.toggleHidden('${it.dayId}','${it.spot.id}',${it.isCand});app.modules.map.closeInfo()">${it.hidden ? '👁 显示' : '🙈 隐藏'}</button>` +
+        `</div>` +
+        (this._mapsUrl(s) ? `<div style="margin-top:6px"><a href="${this._mapsUrl(s)}" target="_blank" rel="noopener" class="text-sky-600 hover:underline" style="font-size:.72rem">🔗 在 Google Maps 打开</a></div>` : '') +
         `</div>`;
       const info = new gm.InfoWindow({ content });
+      this._lastInfo = info;
       if (useAdvanced) marker.addEventListener('click', () => info.open({ anchor: marker, map }));
       else marker.addListener('click', () => info.open(map, marker));
       bounds.extend(pos);
@@ -407,9 +420,9 @@ app.modules.map = {
       const color = this._colorForItem(it, mode);
       const url = this._mapsUrl(s);
       const dayTag = (mode === '__all' && it.dayIndex >= 0) ? `<span class="text-tiny text-slate-400">Day ${it.dayIndex + 1} · </span>` : '';
-      const nameHtml = url
-        ? `<a href="${url}" target="_blank" rel="noopener" class="text-sm font-semibold truncate text-sky-700 hover:underline">${this._esc(s.name || '未命名')}</a>`
-        : `<span class="text-sm font-semibold truncate">${this._esc(s.name || '未命名')}</span>`;
+      const detailCall = `app.modules.itinerary.openTripForm('${it.isCand ? 'cand' : 'spot'}','${it.isCand ? it.spot.id : it.dayId}','${it.spot.id}')`;
+      const nameHtml = `<span class="text-sm font-semibold truncate text-slate-800 hover:text-sky-700 hover:underline cursor-pointer" onclick="${detailCall}" title="点击打开行程详情">${this._esc(s.name || '未命名')}</span>`;
+      const linkBtn = url ? ` <a href="${url}" target="_blank" rel="noopener" class="text-tiny text-sky-600 hover:underline" title="在 Google Maps 打开">🔗</a>` : '';
       // 仅在「既没坐标、也没有地图链接」时提示未定位；已有链接的地点不再显示多余说明
       const hint = (!located && !s.mapUrl)
         ? `<div class="text-tiny text-amber-600 truncate">${app.t('map.unlocated')}</div>`
@@ -421,7 +434,7 @@ app.modules.map = {
       return `<div class="p-2 rounded border ${it.hidden ? 'border-slate-300 bg-slate-50' : 'border-slate-200'} flex items-start gap-2 ${located ? '' : 'opacity-60'}">
         <span style="width:10px;height:10px;border-radius:999px;background:${color};margin-top:5px;flex:none"></span>
         <div class="min-w-0 flex-1">
-          <div class="truncate">${dayTag}${nameHtml} <span class="text-tiny text-slate-400">${s.startTime || ''}</span></div>
+          <div class="truncate">${dayTag}${nameHtml}${linkBtn} <span class="text-tiny text-slate-400">${s.startTime || ''}</span></div>
           ${hint}
         </div>
         ${hideBtn}

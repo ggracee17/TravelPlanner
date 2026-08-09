@@ -3,9 +3,12 @@
  *   1) 已定位（有坐标）→ 不显示任何附注；
  *   2) 未定位但有地图链接 → 也不显示附注（去掉「🔗 已链接（点名称打开）」）；
  *   3) 未定位且无链接 → 显示「未定位…」提示；
- *   4) 名称始终可点（有链接用 mapUrl，无链接按名称搜 Google Maps）；
- *   5) __all 模式带 Day N 前缀。
+ *   4) 名称始终可点，但点击是「打开行程详情」(openTripForm)，【不是】跳转到地图链接；
+ *   5) 地图链接降级为名称右侧独立的 🔗 图标（有坐标→经纬度、有 mapUrl→mapUrl、无则按名称搜索）；
+ *   6) __all 模式带 Day N 前缀。
  * 用 vm 加载真实 app.js + module-i18n.js + module-map.js，桩掉 DOM。
+ * 注意：renderList 期望的 item 形状与 collectSpots 一致（含 dayId/date/isCand/hidden），
+ *       否则 openTripForm 的 dayId 参数会成 undefined —— 这里如实构造以对齐真实调用。
  */
 'use strict';
 const fs = require('fs');
@@ -57,58 +60,74 @@ const spotLocated = { id: 's1', name: '台北101', lat: 25.03, lng: 121.56, star
 const spotLinked = { id: 's2', name: '士林夜市', mapUrl: 'https://www.google.com/maps/place/Shilin', startTime: '18:00', type: 'food' };
 const spotBare = { id: 's3', name: '待定景点', startTime: '', type: 'attraction' };
 
-console.log('\n[测试A] 单日模式：三种定位状态的附注渲染');
+// 与 collectSpots 一致的 item 形状
+function item(spot, dayId, dayIndex, isCand) {
+  return { spot, dayId, dayIndex, date: '2026-08-01', isCand: !!isCand, hidden: false };
+}
+
+// 名称是否为「点击打开行程详情」的可点元素（而非地图 <a> 链接）
+function nameOpensDetail(html, dayId, spotId) {
+  const call = `app.modules.itinerary.openTripForm('spot','${dayId}','${spotId}')`;
+  return html.includes('onclick="' + call + '"');
+}
+
+console.log('\n[测试A] 单日模式：三种定位状态的附注渲染 + 名称/链接分工');
 {
   const { app, listEl } = makeClient();
   const map = app.modules.map;
-  const items = [
-    { spot: spotLocated, dayIndex: 0 },
-    { spot: spotLinked, dayIndex: 0 },
-    { spot: spotBare, dayIndex: 0 }
-  ];
-  map.renderList(items, [{ spot: spotLocated }], 'd1');
+  const items = [item(spotLocated, 'd1', 0), item(spotLinked, 'd1', 0), item(spotBare, 'd1', 0)];
+  map.renderList(items, [item(spotLocated, 'd1', 0)], 'd1');
   const html = listEl.innerHTML;
 
   assert(!html.includes('已链接'), '不再出现「已链接（点名称打开）」文案');
-  assert(!html.includes('🔗'), '不再出现 🔗 图标附注');
+  assert(html.includes('🔗'), '名称旁出现独立 🔗 地图链接');
   assert(!/·\s*<span class="text-sky-600"/.test(html), '不再出现前导「·」的链接说明块');
   assert(html.includes('未定位'), '无坐标且无链接的地点仍提示「未定位」');
   assert((html.match(/未定位/g) || []).length === 1, '「未定位」只出现 1 次（仅 s3）');
   assert(html.includes('台北101') && html.includes('士林夜市') && html.includes('待定景点'), '三个地点都渲染出来了');
+  // 名称点击打开行程详情，而非跳转地图
+  assert(nameOpensDetail(html, 'd1', 's1'), '台北101 名称点击打开行程详情（非地图链接）');
+  assert(nameOpensDetail(html, 'd1', 's2'), '士林夜市 名称点击打开行程详情（非地图链接）');
+  assert(nameOpensDetail(html, 'd1', 's3'), '待定景点 名称点击打开行程详情（非地图链接）');
 }
 
-console.log('\n[测试B] 名称链接与置灰状态不受影响');
+console.log('\n[测试B] 名称打开详情 + 🔗 独立链接指向正确地址');
 {
   const { app, listEl } = makeClient();
   const map = app.modules.map;
-  map.renderList([{ spot: spotLinked, dayIndex: 0 }], [], 'd1');
+  map.renderList([item(spotLinked, 'd1', 0)], [], 'd1');
   const html = listEl.innerHTML;
-  assert(html.includes('href="https://www.google.com/maps/place/Shilin"'), '有 mapUrl 时名称链接指向该链接');
+  assert(html.includes('href="https://www.google.com/maps/place/Shilin"'), '🔗 地图链接指向用户粘贴的 mapUrl');
   assert(html.includes('target="_blank"'), '链接新窗口打开');
   assert(html.includes('opacity-60'), '未定位地点仍置灰（视觉上可区分）');
+  assert(nameOpensDetail(html, 'd1', 's2'), '名称点击打开行程详情');
+  // 名称本身不应被包进地图 <a>：链接的可见文案是 🔗 而非地点名
+  assert(!new RegExp('href="https://www.google.com/maps/place/Shilin"[^>]*>士林夜市').test(html), '名称未被包进地图链接（链接仅在 🔗 图标）');
 }
 {
   const { app, listEl } = makeClient();
   const map = app.modules.map;
-  map.renderList([{ spot: spotLocated, dayIndex: 0 }], [{ spot: spotLocated }], 'd1');
+  map.renderList([item(spotLocated, 'd1', 0)], [item(spotLocated, 'd1', 0)], 'd1');
   const html = listEl.innerHTML;
-  assert(html.includes('maps?q=25.03%2C121.56'), '有坐标时名称链接用经纬度（逗号已 URL 编码）');
+  assert(html.includes('maps?q=25.03%2C121.56'), '🔗 地图链接用经纬度（逗号已 URL 编码）');
   assert(!html.includes('opacity-60'), '已定位地点不置灰');
   assert(!html.includes('未定位'), '已定位地点无任何附注');
+  assert(nameOpensDetail(html, 'd1', 's1'), '名称点击打开行程详情');
 }
 {
   const { app, listEl } = makeClient();
   const map = app.modules.map;
-  map.renderList([{ spot: spotBare, dayIndex: 0 }], [], 'd1');
+  map.renderList([item(spotBare, 'd1', 0)], [], 'd1');
   const html = listEl.innerHTML;
-  assert(html.includes('maps/search/?api=1&query='), '无坐标无链接时按名称搜索 Google Maps');
+  assert(html.includes('maps/search/?api=1&query='), '🔗 无坐标无链接时按名称搜索 Google Maps');
+  assert(nameOpensDetail(html, 'd1', 's3'), '名称点击打开行程详情');
 }
 
 console.log('\n[测试C] __all 模式 Day 前缀仍正常');
 {
   const { app, listEl } = makeClient();
   const map = app.modules.map;
-  map.renderList([{ spot: spotLinked, dayIndex: 2 }], [], '__all');
+  map.renderList([item(spotLinked, 'd3', 2)], [], '__all');
   const html = listEl.innerHTML;
   assert(html.includes('Day 3 ·'), '全部日期模式显示 Day 3 前缀');
   assert(!html.includes('已链接'), '全部日期模式同样不显示「已链接」');
@@ -120,7 +139,7 @@ console.log('\n[测试D] 英文模式下也不出现链接说明');
   app.i18nEnabled = true;   // UI 上切换按钮已隐藏，这里显式开启以验证英文文案
   app.setLang('en');
   const map = app.modules.map;
-  map.renderList([{ spot: spotLinked, dayIndex: 0 }, { spot: spotBare, dayIndex: 0 }], [], 'd1');
+  map.renderList([item(spotLinked, 'd1', 0), item(spotBare, 'd1', 0)], [], 'd1');
   const html = listEl.innerHTML;
   assert(!/Linked \(click name to open\)/.test(html), '英文下不出现 "Linked (click name to open)"');
   assert(html.includes('Not located'), '英文下未定位提示仍在');

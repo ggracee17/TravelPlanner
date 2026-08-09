@@ -482,7 +482,10 @@ table.data-table tr:hover td { background: #f8fafc; }
   cursor: grab; box-shadow: 0 1px 3px rgba(0,0,0,.10);
   border-left: 4px solid #64748b; background: #f8fafc;
   display: flex; gap: 6px; align-items: stretch;
+  touch-action: none; /* 防止触摸设备拖动时触发页面滚动，确保可拖拽 */
 }
+/* 鼠标悬停时置顶，避免被重叠的相邻行程块完全盖住而无法点中拖动 */
+.tl-block:hover { z-index: 30; }
 .tl-block:active { cursor: grabbing; }
 .tl-block.dragging { opacity: 0.4; }
 .tl-block-main { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; }

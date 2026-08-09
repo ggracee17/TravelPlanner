@@ -123,7 +123,7 @@ const day = {
 const colHtml = itin.renderDayColumn(day, 0, dest, false);
 assert(colHtml.includes('台北→珀斯 航班'), '清晨航班（05:00）出现在行程表渲染中');
 assert(colHtml.includes('下午自由活动'), '普通行程块正常渲染');
-assert(colHtml.includes('行程块 2 个'), '行程块计数包含清晨航班（不再被过滤成 1 个）');
+assert((colHtml.match(/class="tl-block /g) || []).length === 2, '两张行程块均渲染（清晨航班不再被过滤成 1 个）');
 
 console.log(`\n==== 结果：${passed} 通过 / ${failed} 失败 ====`);
 process.exit(failed ? 1 : 0);

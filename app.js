@@ -493,6 +493,13 @@ const app = {
   pushBoard() {
     this._saveTimer = null; // 标记：本地改动已进入推送流程（防抖计时结束，避免 _saveTimer 常驻导致后续远端被误判为「有待推送改动」）
     if (!this.sessionToken) return Promise.resolve();
+    // 并发编辑保护：若「本地有待推送改动期间」暂存了协作者的远端更新，推送前先把它并入本地，
+    // 避免把对方刚新增的行程块覆盖掉（典型症状：2 人同时编辑，一方保存后，另一方因推送旧态导致对方新增的块消失）。
+    if (this._pendingRemote) {
+      this.state = this.mergeStatesPreferLocal(this._pendingRemote, this.state);
+      this._pendingRemote = null;
+      this._lastSig = JSON.stringify(this.state);
+    }
     const payload = JSON.stringify(this.state);
     this._writeLocalCache(); // 安全网：推送前先镜像一份到本地
     this.updateStatus(this.t('status.saving'));
@@ -538,6 +545,46 @@ const app = {
       if (!Array.isArray(s.checklists.todos)) s.checklists.todos = (s.checklists.todos && typeof s.checklists.todos === 'object') ? Object.values(s.checklists.todos) : [];
     }
     return s;
+  },
+
+  /* 合并两份看板状态：以 local 为准，补回 remote 中「local 没有、但 remote 有」的项目（按 id 并集）。
+     用途：当本地有待推送改动、又收到了协作者（另一台电脑）的远端更新时，在推送前把远端新增项并入本地，
+     避免「后保存的一方把先保存的一方刚添加的行程块覆盖掉」的并发丢失（典型：2 人同时编辑，一方保存后另一方因推送旧态而丢失对方新增）。
+     冲突（同一 id 双方都有）以 local 版本为准；只有 remote 独有的项会被补回。 */
+  mergeStatesPreferLocal(remote, local) {
+    if (!local) return remote;
+    if (!remote) return local;
+    const out = JSON.parse(JSON.stringify(local)); // local 优先
+    const addMissing = (arrRemote, arrLocal, key) => {
+      if (!Array.isArray(arrRemote)) return;
+      const ids = new Set((arrLocal || []).map(x => x[key]));
+      arrRemote.forEach(x => { if (x && x[key] != null && !ids.has(x[key])) arrLocal.push(JSON.parse(JSON.stringify(x))); });
+    };
+    // 目的地：补回 remote 独有的目的地，并按目的地并集其每日行程与行程块
+    const rDests = new Map((remote.destinations || []).map(d => [d.id, d]));
+    (out.destinations || []).forEach(d => {
+      const rd = rDests.get(d.id); if (!rd) return;
+      if (!Array.isArray(d.itinerary)) d.itinerary = [];
+      const rDays = new Map((rd.itinerary || []).map(day => [day.id, day]));
+      rd.itinerary.forEach(rDay => {
+        let lDay = d.itinerary.find(x => x.id === rDay.id);
+        if (!lDay) { lDay = JSON.parse(JSON.stringify(rDay)); d.itinerary.push(lDay); return; }
+        addMissing(rDay.spots || [], lDay.spots || (lDay.spots = []), 'id');
+      });
+    });
+    addMissing(remote.destinations || [], out.destinations || (out.destinations = []), 'id');
+    // 候选库：补回 remote 独有项
+    addMissing(remote.candidates || [], out.candidates || (out.candidates = []), 'id');
+    // 核对清单：每个列表按 id 并集
+    if (remote.checklists) {
+      out.checklists = out.checklists || {};
+      ['documents', 'luggage', 'todos'].forEach(k => {
+        const rl = remote.checklists[k] || [];
+        const ll = out.checklists[k] || (out.checklists[k] = []);
+        addMissing(rl, ll, 'id');
+      });
+    }
+    return out;
   },
 
   loadState() {
