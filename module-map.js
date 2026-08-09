@@ -17,18 +17,24 @@ function gmapsKey() {
   return (typeof window !== 'undefined' && window.BOARD_CONFIG && window.BOARD_CONFIG.gmapsApiKey) || '';
 }
 
+// 单日视图：按「地点类别」分色 —— 必须与 module-itinerary.js 的 ITIN_TYPES 配色/标签完全一致，
+// 这样「按天筛选」后地图上的类别与颜色就和每日行程表统一（缺的类别不再回退成灰色）。
 const MAP_COLORS = {
   restaurant: '#ef4444', hotel: '#a855f7', spot: '#3b82f6',
-  transport: '#06b6d4', shopping: '#f97316', other: '#64748b'
+  transport: '#06b6d4', shopping: '#eab308', entertainment: '#6366f1',
+  photo: '#0d9488', dessert: '#d946ef', snack: '#f97316',
+  activity: '#16a34a', other: '#64748b'
 };
 
 // 全部日期视图：按「第几天」分色（Day1 红 → Day2 橙 → … 循环）
 const DAY_COLORS = ['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#a855f7'];
 
-// 单日视图：按「地点类别」分色，复用 MAP_COLORS + 中文标签
+// 单日视图图例的中文类别名（与 ITIN_TYPES 的 label 保持一致）
 const CATEGORY_LABELS = {
   restaurant: '餐饮', hotel: '酒店', spot: '景点',
-  transport: '交通', shopping: '购物', other: '其他'
+  transport: '交通', shopping: '购物', entertainment: '娱乐',
+  photo: '拍照', dessert: '甜品', snack: '小吃',
+  activity: '活动', other: '其他'
 };
 
 app.modules.map = {
