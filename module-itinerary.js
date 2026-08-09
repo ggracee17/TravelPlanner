@@ -379,9 +379,13 @@ app.modules.itinerary = {
       || (e.currentTarget && e.currentTarget.closest && e.currentTarget.closest('[data-spot-id]'))
       || e.currentTarget;
     if (!el) return;
-    // 锁定页面滚动：拖动行程期间整页不滚动（避免原生拖拽把页面错误地带到最顶部），
+    // 拖动期间阻止整页自动滚动（原生拖拽靠近视口边缘时，浏览器会自动滚动页面）：
+    // 用 document 级 dragover 的 preventDefault 实现，不改动 html/body 的 overflow（否则会打断原生拖拽）。
     // 需要滚动时由下方「时间轴边缘自动滚动」逻辑处理（仅当拖到时间轴可视区之外）。
-    try { document.documentElement.classList.add('drag-lock'); document.body.classList.add('drag-lock'); } catch (_) {}
+    try {
+      this._preventPageScroll = (ev) => { if (this._drag) ev.preventDefault(); };
+      document.addEventListener('dragover', this._preventPageScroll, { passive: false });
+    } catch (_) {}
     this._dragScroll = { tl: null, clientY: 0 };
     this._startAutoScroll();
     const d = app.getActiveDestination();
@@ -404,25 +408,12 @@ app.modules.itinerary = {
       e.dataTransfer.setDragImage(blank, 0, 0);
     } catch (_) {}
 
-    // 拖拽时展开所有时间轴为完整 0–24，便于看到全部可放置区域（含 0:00 起的凌晨行程）
-    const hpx = itinHourPx();
-    const allDays = app.state[d.id]?.itinerary || [];
+    // 时间轴本就是完整 0–24（dayWindow 恒返回 0–24），拖动时无需展开/重建 DOM（重建会打断原生拖拽）；
+    // 这里仅同步 data-win-* 供落点换算小时使用。
     document.querySelectorAll('[data-section=itinerary] .timeline').forEach(tl => {
-      const day = allDays.find(x => x.id === tl.dataset.dayId);
-      const win = day ? this.dayWindow(day, true) : { start: ITIN_TL_START, end: ITIN_TL_END };
-      const ws = win.start, we = win.end;
-      tl.dataset.winStart = ws; tl.dataset.winEnd = we;
-      tl.style.height = ((we - ws) * hpx) + 'px';
-      const hb = tl.querySelector('.tl-hours');
-      if (hb) {
-        let hh = '';
-        for (let i = ws; i < we; i++) hh += `<div class="tl-hour"><span class="tl-label">${i}:00</span></div>`;
-        hb.innerHTML = hh;
-      }
-      tl.querySelectorAll('.tl-block').forEach(b => {
-        const st = itinTimeToNum(b.dataset.start);
-        b.style.top = ((st - ws) * hpx) + 'px';
-      });
+      const tday = (app.state[d.id]?.itinerary || []).find(x => x.id === tl.dataset.dayId);
+      const win = tday ? this.dayWindow(tday, true) : { start: ITIN_TL_START, end: ITIN_TL_END };
+      tl.dataset.winStart = win.start; tl.dataset.winEnd = win.end;
     });
   },
 
@@ -533,7 +524,7 @@ app.modules.itinerary = {
     this._drag = null;
     // 停止边缘自动滚动并解除页面滚动锁定（恢复整页可滚动）
     this._stopAutoScroll();
-    try { document.documentElement.classList.remove('drag-lock'); document.body.classList.remove('drag-lock'); } catch (_) {}
+    try { if (this._preventPageScroll) { document.removeEventListener('dragover', this._preventPageScroll); this._preventPageScroll = null; } } catch (_) {}
     document.querySelectorAll('.tl-drop-line').forEach(l => l.style.display = 'none');
     document.querySelectorAll('.tl-drop-ghost').forEach(g => g.remove());
     // 拖拽被取消（未成功 drop）时，恢复折叠视图（expanded 状态在 onDragStart 里改过）。

@@ -489,8 +489,6 @@ table.data-table tr:hover td { background: #f8fafc; }
 .tl-block:hover { z-index: 30; }
 .tl-block:active { cursor: grabbing; }
 .tl-block.dragging { opacity: 0.4; }
-/* 拖动行程期间锁定整页滚动（防止原生拖拽把页面错误地带到最顶部）；仅时间轴自身可边缘滚动 */
-html.drag-lock, body.drag-lock { overflow: hidden !important; }
 .tl-block-main { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; }
 .tl-block-title {
   font-weight: 600; font-size: 0.8rem; line-height: 1.15; color: #0f172a;

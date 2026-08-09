@@ -358,12 +358,8 @@ app.modules.checklists = {
     if (!item) return;
     item.done = done;
     app.saveState();
-    const row = document.querySelector(`[data-todo-id="${id}"]`);
-    if (row) {
-      row.classList.toggle('checked', done);
-      const nameEl = row.querySelector('.font-medium');
-      if (nameEl) nameEl.classList.toggle('line-through', done), nameEl.classList.toggle('text-slate-400', done);
-    }
+    // 重渲整个核对清单，让头部「已勾选 N / 总数」计数与「归档已完成」按钮显隐一起更新
+    this.render();
   },
 
   removeTodo(id) {
