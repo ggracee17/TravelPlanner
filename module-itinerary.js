@@ -386,7 +386,7 @@ app.modules.itinerary = {
       e.dataTransfer.setDragImage(blank, 0, 0);
     } catch (_) {}
 
-    // 拖拽时展开所有时间轴，便于看到全部可放置区域（按各天真实窗口，含早于 06:00 的行程）
+    // 拖拽时展开所有时间轴为完整 0–24，便于看到全部可放置区域（含 0:00 起的凌晨行程）
     const hpx = itinHourPx();
     const allDays = app.state[d.id]?.itinerary || [];
     document.querySelectorAll('[data-section=itinerary] .timeline').forEach(tl => {
