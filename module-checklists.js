@@ -61,8 +61,9 @@ const DEFAULT_LUG = [
 
 // 在 app.init() 的 loadState() 之后调用：仅当清单为空才用默认值填充，绝不覆盖用户已保存的行程数据
 app.ensureChecklists = function () {
-  if (!this.state.checklists) this.state.checklists = { documents: [], luggage: [], todos: [] };
+  if (!this.state.checklists) this.state.checklists = { documents: [], luggage: [], todos: [], archived: [] };
   if (!Array.isArray(this.state.checklists.todos)) this.state.checklists.todos = [];
+  if (!Array.isArray(this.state.checklists.archived)) this.state.checklists.archived = [];
   if (this.state.checklists.documents.length === 0) {
     this.state.checklists.documents = DEFAULT_DOCS.map(x => ({ ...x }));
   }
@@ -79,6 +80,7 @@ app.modules.checklists = {
     const docs = app.state.checklists.documents || [];
     const lug = app.state.checklists.luggage || [];
     const todos = app.state.checklists.todos || [];
+    const archived = app.state.checklists.archived || [];
     const docsChecked = docs.filter(x => x.checked).length;
     const lugChecked = lug.filter(x => x.checked).length;
     const todoDone = todos.filter(x => x.done).length;
@@ -112,7 +114,7 @@ app.modules.checklists = {
         <div class="card-title">
           <span>📋 ${app.t('todo.title')}（${app.t('checklist.checked')} ${todoDone} / ${todos.length}）</span>
           <div class="ml-auto flex gap-2">
-            ${todoDone > 0 ? `<button class="btn btn-ghost btn-sm" onclick="app.modules.checklists.clearCompletedTodos()" title="删除所有已打勾的待办，缩短列表">🧹 清除已完成</button>` : ''}
+            ${todoDone > 0 ? `<button class="btn btn-ghost btn-sm" onclick="app.modules.checklists.archiveCompletedTodos()" title="把已打勾的待办收进「已归档」，不删除、可随时移出">📦 归档已完成</button>` : ''}
             <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addTodo()">${app.t('todo.add')}</button>
           </div>
         </div>
@@ -147,7 +149,32 @@ app.modules.checklists = {
         <p class="text-tiny text-slate-500 mb-2">已按品类分组：衣物 / 洗护 / 电子设备 / 药品 / 随身杂物</p>
         ${this.renderLugByCategory(lug)}
       </div>
+
+      <!-- 已归档待办：显示在页面最底部，可随时移出或永久删除 -->
+      <div class="card">
+        <div class="card-title">
+          <span>📦 已归档待办（${archived.length}）</span>
+          <div class="ml-auto flex gap-2">
+            ${archived.length > 0 ? `<button class="btn btn-danger btn-sm" onclick="app.modules.checklists.clearArchive()">🧹 清空归档</button>` : ''}
+          </div>
+        </div>
+        ${archived.length === 0
+          ? '<p class="text-sm text-slate-400 mt-2">归档的待办会显示在这里。点上方「📦 归档已完成」可把已打勾的待办收进来，列表更清爽，且不会丢失。</p>'
+          : `<div id="archivedList">${archived.map(t => this.renderArchivedItem(t)).join('')}</div>`}
+      </div>
     `;
+  },
+
+  renderArchivedItem(t) {
+    return `
+      <div class="checklist-item archived-item" data-archived-id="${t.id}">
+        <div class="flex-1 min-w-0">
+          <div class="font-medium text-slate-700">${app._esc(t.name)}</div>
+          ${t.detail ? `<div class="text-tiny text-slate-500 mt-0.5 whitespace-pre-wrap break-words">${app._esc(t.detail)}</div>` : ''}
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="app.modules.checklists.restoreTodo('${t.id}')" title="移回待办列表（保持已完成状态）">↩ 移出</button>
+        <button class="btn btn-danger btn-sm" onclick="app.modules.checklists.deleteArchived('${t.id}')">🗑️</button>
+      </div>`;
   },
 
   renderTodoItem(t) {
@@ -346,16 +373,50 @@ app.modules.checklists = {
     this.render();
   },
 
-  /* 清除所有已完成的待办事项（缩短任务列表）。仅在有已完成项时显示按钮；带二次确认。 */
-  clearCompletedTodos() {
+  /* 把全部「已完成」的待办收入「已归档」，不删除、可随时移出。仅在有已完成项时显示按钮。 */
+  archiveCompletedTodos() {
     const todos = app.state.checklists.todos || [];
     const done = todos.filter(x => x.done);
     if (done.length === 0) { app.toast('没有已完成的待办事项', 'info'); return; }
-    if (!confirm(`确定清除 ${done.length} 条已完成的待办事项？清除后无法恢复。`)) return;
+    const archived = app.state.checklists.archived || (app.state.checklists.archived = []);
+    done.forEach(t => archived.push({ ...t }));
     app.state.checklists.todos = todos.filter(x => !x.done);
     app.saveState();
     this.render();
-    app.toast(`已清除 ${done.length} 条已完成待办`, 'success');
+    app.toast(`已将 ${done.length} 条已完成待办归档`, 'success');
+  },
+
+  /* 把一条归档待办移回待办列表（保持已完成状态）。 */
+  restoreTodo(id) {
+    const archived = app.state.checklists.archived || [];
+    const item = archived.find(x => x.id === id);
+    if (!item) return;
+    app.state.checklists.archived = archived.filter(x => x.id !== id);
+    app.state.checklists.todos = app.state.checklists.todos || [];
+    app.state.checklists.todos.push({ ...item });
+    app.saveState();
+    this.render();
+    app.toast('已移出归档，回到待办列表', 'success');
+  },
+
+  /* 永久删除一条归档待办（不可恢复）。 */
+  deleteArchived(id) {
+    if (!confirm('确定永久删除这条归档待办？此操作不可恢复。')) return;
+    app.state.checklists.archived = (app.state.checklists.archived || []).filter(x => x.id !== id);
+    app.saveState();
+    this.render();
+    app.toast('已删除该归档待办', 'info');
+  },
+
+  /* 清空整个归档（永久删除）。 */
+  clearArchive() {
+    const n = (app.state.checklists.archived || []).length;
+    if (n === 0) return;
+    if (!confirm(`确定清空全部 ${n} 条已归档待办？此操作不可恢复。`)) return;
+    app.state.checklists.archived = [];
+    app.saveState();
+    this.render();
+    app.toast('已清空归档', 'info');
   },
 
   reset() {

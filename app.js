@@ -16,7 +16,8 @@ const app = {
     checklists: {
       documents: [],          // 证件清单
       luggage: [],            // 行李清单
-      todos: []               // 待办事项（名称 + 详情 + 完成勾选）
+      todos: [],              // 待办事项（名称 + 详情 + 完成勾选）
+      archived: []            // 已归档待办（「📦 归档已完成」从 todos 移入，可随时移出/删除）
     },
     searchHistory: []         // 全网检索历史
   },
@@ -560,11 +561,12 @@ const app = {
         s[k] = (typeof s[k] === 'object') ? Object.values(s[k]) : [];
       }
     });
-    if (!s.checklists || typeof s.checklists !== 'object') s.checklists = { documents: [], luggage: [], todos: [] };
+    if (!s.checklists || typeof s.checklists !== 'object') s.checklists = { documents: [], luggage: [], todos: [], archived: [] };
     else {
       if (!Array.isArray(s.checklists.documents)) s.checklists.documents = (s.checklists.documents && typeof s.checklists.documents === 'object') ? Object.values(s.checklists.documents) : [];
       if (!Array.isArray(s.checklists.luggage)) s.checklists.luggage = (s.checklists.luggage && typeof s.checklists.luggage === 'object') ? Object.values(s.checklists.luggage) : [];
       if (!Array.isArray(s.checklists.todos)) s.checklists.todos = (s.checklists.todos && typeof s.checklists.todos === 'object') ? Object.values(s.checklists.todos) : [];
+      if (!Array.isArray(s.checklists.archived)) s.checklists.archived = (s.checklists.archived && typeof s.checklists.archived === 'object') ? Object.values(s.checklists.archived) : [];
     }
     return s;
   },
@@ -600,7 +602,7 @@ const app = {
     // 核对清单：每个列表按 id 并集
     if (remote.checklists) {
       out.checklists = out.checklists || {};
-      ['documents', 'luggage', 'todos'].forEach(k => {
+      ['documents', 'luggage', 'todos', 'archived'].forEach(k => {
         const rl = remote.checklists[k] || [];
         const ll = out.checklists[k] || (out.checklists[k] = []);
         addMissing(rl, ll, 'id');
@@ -887,6 +889,7 @@ const app = {
               this.state.checklists.documents = [...(this.state.checklists.documents || []), ...(data.checklists?.documents || [])];
               this.state.checklists.luggage = [...(this.state.checklists.luggage || []), ...(data.checklists?.luggage || [])];
               this.state.checklists.todos = [...(this.state.checklists.todos || []), ...(data.checklists?.todos || [])];
+              this.state.checklists.archived = [...(this.state.checklists.archived || []), ...(data.checklists?.archived || [])];
             } else {
               const cur = this.state[k], inc = data[k];
               // candidates / searchHistory 等顶层数组：按 id 去重追加，绝不能当对象 spread（否则 .map 会崩）
@@ -960,7 +963,7 @@ const app = {
     this.state = {
       destinations: [],
       activeDestinationId: null,
-      checklists: { documents: [], luggage: [], todos: [] },
+      checklists: { documents: [], luggage: [], todos: [], archived: [] },
       searchHistory: []
     };
     this.saveState();

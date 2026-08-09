@@ -41,6 +41,9 @@ app.modules.map = {
   _geoCache: {},        // 地理编码结果缓存（query → {lat,lng}），先从 localStorage 装载，避免重复消耗配额
   _geoFail: new Set(),  // 地理编码失败的 query，避免重复调用（持久化，跨刷新也不重试）
   _geoLoaded: false,
+  _urlResolveKey: 'travel_url_resolve_v1', // 地图链接（短链）服务端解析结果缓存
+  _urlCache: undefined,
+  _urlFail: undefined,
 
   render() {
     const sec = document.querySelector('[data-section=map]');
@@ -242,6 +245,16 @@ app.modules.map = {
       s._geoFailed = false; s._geoFailQ = '';
       return changed ? 'located' : 'existing';
     }
+    // 链接本身不含坐标（maps.app.goo.gl 等短链接）→ 服务端跟随重定向解析坐标，无需链接自带坐标
+    if (s.mapUrl) {
+      const r = await this.resolveMapUrl(s.mapUrl);
+      if (r) {
+        s.lat = r.lat; s.lng = r.lng;
+        if (it.isCand) { const c = (app.state.candidates || []).find(x => x.id === it.spot.id); if (c) { c.lat = r.lat; c.lng = r.lng; } }
+        s._geoFailed = false; s._geoFailQ = '';
+        return 'located';
+      }
+    }
     // 无链接或链接无坐标：已有坐标则跳过，否则按名称/地址地理编码
     if (s.lat != null && s.lng != null) return 'existing';
     // 无链接 / 链接无坐标：按名称/地址地理编码（省 Credits 模式跳过，只显示已有/链接坐标的点）
@@ -278,8 +291,10 @@ app.modules.map = {
       target = sp;
     }
     if (!target.mapUrl) { if (app.toast) app.toast('该地点还没有地图链接，无法重新定位', 'warning'); return; }
-    const fromUrl = extractCoordsFromMapUrl(target.mapUrl);
-    if (!fromUrl) { if (app.toast) app.toast('无法从地图链接解析出坐标，请检查链接格式', 'warning'); return; }
+    let fromUrl = extractCoordsFromMapUrl(target.mapUrl);
+    // 链接本身无坐标（短链接等）→ 服务端跟随重定向解析
+    if (!fromUrl) fromUrl = await this.resolveMapUrl(target.mapUrl);
+    if (!fromUrl) { if (app.toast) app.toast('无法从地图链接解析出坐标（短链接需联网解析，请检查链接是否指向某个地点）', 'warning'); return; }
     // 关闭当前可能打开的弹窗，避免指向即将被重建的旧 marker
     this.closeInfo();
     target.lat = fromUrl.lat; target.lng = fromUrl.lng;
@@ -314,6 +329,49 @@ app.modules.map = {
     this._geoFail = new Set();
     try { if (typeof localStorage !== 'undefined') localStorage.removeItem(this._geoCacheKey); } catch (e) {}
     if (typeof app !== 'undefined' && app.toast) app.toast(app.t ? app.t('map.cacheCleared') : '已清除地理编码缓存', 'info');
+  },
+
+  /* 服务端解析地图链接坐标（短链接 maps.app.goo.gl 等，链接里没有 @lat,lng 时）。
+     仅在后端模式下可用（依赖服务端 /api/resolve-map-url 跟随重定向）。结果按 URL 缓存到 localStorage，避免重复请求。 */
+  async resolveMapUrl(url) {
+    if (!app.backend || !app.backend.enabled || !url) return null;
+    if (this._urlResolveCache === undefined) this.loadUrlResolveCache();
+    if (this._urlResolveCache[url]) return this._urlResolveCache[url];
+    if (this._urlResolveFail && this._urlResolveFail.has(url)) return null;
+    try {
+      const endpoint = (app.base() || '') + '/api/resolve-map-url?url=' + encodeURIComponent(url);
+      const resp = await fetch(endpoint, { headers: app.sessionToken ? { Authorization: 'Bearer ' + app.sessionToken } : {} });
+      const data = await resp.json();
+      if (data && data.ok && data.lat != null && data.lng != null) {
+        const r = { lat: Number(data.lat), lng: Number(data.lng) };
+        if (!this._urlResolveCache) this._urlResolveCache = {};
+        if (!this._urlResolveFail) this._urlResolveFail = new Set();
+        this._urlResolveCache[url] = r; this.persistUrlResolveCache();
+        return r;
+      }
+      if (!this._urlResolveFail) this._urlResolveFail = new Set();
+      this._urlResolveFail.add(url); this.persistUrlResolveCache();
+      return null;
+    } catch (e) { return null; }
+  },
+
+  loadUrlResolveCache() {
+    this._urlResolveCache = {}; this._urlResolveFail = new Set();
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const raw = localStorage.getItem(this._urlResolveKey);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d && d.cache && typeof d.cache === 'object') this._urlResolveCache = d.cache;
+      if (d && Array.isArray(d.fail)) this._urlResolveFail = new Set(d.fail);
+    } catch (e) {}
+  },
+
+  persistUrlResolveCache() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(this._urlResolveKey, JSON.stringify({ cache: this._urlResolveCache || {}, fail: Array.from(this._urlResolveFail || []) }));
+    } catch (e) {}
   },
 
   async showMap() {

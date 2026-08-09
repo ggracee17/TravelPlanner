@@ -214,6 +214,38 @@ function readBody(req) {
   });
 }
 
+// 从 URL 文本提取 @lat,lng / !3d!4d / ?q=lat,lng（与前端 extractCoordsFromMapUrl 等价）
+function extractCoordsFromUrlText(url) {
+  if (!url || typeof url !== 'string') return null;
+  let m;
+  m = url.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  const d3 = url.match(/!3d(-?\d+(?:\.\d+)?)/);
+  const d4 = url.match(/!4d(-?\d+(?:\.\d+)?)/);
+  if (d3 && d4) return { lat: parseFloat(d3[1]), lng: parseFloat(d4[1]) };
+  m = url.match(/[?&](?:q|query)=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  return null;
+}
+
+// 服务端解析地图链接坐标：仅允许 Google / goo.gl 系列域名（避免被当 SSRF 探测内网），
+// 跟随重定向拿到最终 URL，再从中提取坐标。这样 maps.app.goo.gl 等短链接也能定位，无需链接里自带坐标。
+function resolveMapUrl(target) {
+  return new Promise((resolve) => {
+    if (typeof fetch !== 'function') { resolve(null); return; }
+    if (typeof target !== 'string' || !/^https?:\/\//i.test(target)) { resolve(null); return; }
+    let host = '';
+    try { host = new URL(target).hostname.toLowerCase(); } catch (e) { resolve(null); return; }
+    const okHost = /\.google\.[a-z.]+$/.test(host) || host === 'goo.gl' || host.endsWith('maps.app.goo.gl') || /\.googleapis\.com$/.test(host);
+    if (!okHost) { resolve(null); return; }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, 8000);
+    fetch(target, { redirect: 'follow', signal: ctrl.signal, headers: { 'User-Agent': 'Mozilla/5.0' } })
+      .then(r => { clearTimeout(timer); resolve(extractCoordsFromUrlText(r.url || target)); })
+      .catch(() => { clearTimeout(timer); resolve(null); });
+  });
+}
+
 // ---- HTTP 路由 ----
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -350,6 +382,27 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: false, error: e.message }));
       }
+      return;
+    }
+
+    // 解析地图链接坐标：短链接（maps.app.goo.gl/...）或不含坐标的链接，服务端跟随重定向拿到最终 URL，
+    // 再从其文本中解析 @lat,lng / !3d!4d / ?q=lat,lng。这样粘贴短链接也能定位，不必链接里自带坐标。
+    // 仅做同域重定向跟随 + 坐标提取，不依赖 Google API Key（不消耗 Geocoding 配额）。
+    if (pathname === '/api/resolve-map-url' && req.method === 'GET') {
+      const target = (urlObj.searchParams.get('url') || '').trim();
+      // 仅允许 http(s) 链接，避免任意协议/本地路径造成 SSRF 风险
+      if (!/^https?:\/\//i.test(target)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: '仅支持 http/https 地图链接' }));
+        return;
+      }
+      resolveMapUrl(target).then(r => {
+        if (r) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, lat: r.lat, lng: r.lng, resolved: r.resolved || null })); }
+        else { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: '无法从链接解析出坐标（请确认链接指向某个地点）' })); }
+      }).catch(err => {
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: '解析链接失败：' + (err && err.message || err) }));
+      });
       return;
     }
 

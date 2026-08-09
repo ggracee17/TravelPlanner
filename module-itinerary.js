@@ -163,9 +163,9 @@ app.modules.itinerary = {
           </div>
         `}
       </div>`;
-        // 默认把每条时间轴滚动到顶部（00:00 起），让一天的行程从清晨开始显示；
-    // 向下滚动可见更晚时段。避免默认停在底部（6:00–24:00）让用户误以为「被拖到底/看不到开头」。
-    try { sec.querySelectorAll('.timeline').forEach(tl => { tl.scrollTop = 0; }); } catch (_) {}
+        // 默认把每条时间轴滚动到「6:00–00:00」区段（即最大滚动值）：因为大部分行程在 6:00 之后，
+    // 这样默认就停在常用区间，免去每次手动拖到最底；向上滚动仍可看到 6:00 之前的凌晨行程。
+    try { sec.querySelectorAll('.timeline').forEach(tl => { tl.scrollTop = tl.scrollHeight - tl.clientHeight; }); } catch (_) {}
   },
 
   toggleZoom() {
@@ -372,6 +372,11 @@ app.modules.itinerary = {
       || (e.currentTarget && e.currentTarget.closest && e.currentTarget.closest('[data-spot-id]'))
       || e.currentTarget;
     if (!el) return;
+    // 锁定页面滚动：拖动行程期间整页不滚动（避免原生拖拽把页面错误地带到最顶部），
+    // 需要滚动时由下方「时间轴边缘自动滚动」逻辑处理（仅当拖到时间轴可视区之外）。
+    try { document.documentElement.classList.add('drag-lock'); document.body.classList.add('drag-lock'); } catch (_) {}
+    this._dragScroll = { tl: null, clientY: 0 };
+    this._startAutoScroll();
     const d = app.getActiveDestination();
     if (!d) return;
     const day = (app.state[d.id]?.itinerary || []).find(x => x.id === el.dataset.dayId);
@@ -421,6 +426,16 @@ app.modules.itinerary = {
     const ws = parseFloat(tl.dataset.winStart), we = parseFloat(tl.dataset.winEnd);
     const hpx = itinHourPx();
     const rect = tl.getBoundingClientRect();
+    // 记录指针位置，供「边缘自动滚动」循环使用
+    if (this._dragScroll) { this._dragScroll.tl = tl; this._dragScroll.clientY = e.clientY; }
+    // 边缘自动滚动：仅当指针贴近时间轴上/下边缘（拖到可视区之外）时，才滚动时间轴本身；
+    // 页面整体不会滚动（已在 onDragStart 锁定）。这样拖动到显示区域外才会滚动，符合预期。
+    const edge = 48;
+    if (e.clientY < rect.top + edge) {
+      tl.scrollTop -= Math.max(1, Math.round((edge - (e.clientY - rect.top)) * 0.4));
+    } else if (e.clientY > rect.bottom - edge) {
+      tl.scrollTop += Math.max(1, Math.round((edge - (rect.bottom - e.clientY)) * 0.4));
+    }
     const y = e.clientY - rect.top;
     let hour = itinSnap(ws + (y + (tl.scrollTop || 0)) / hpx);
     hour = Math.max(ws, Math.min(we - 0.5, hour));
@@ -449,6 +464,31 @@ app.modules.itinerary = {
     if (e.relatedTarget && tl.contains(e.relatedTarget)) return;
     const l = tl.querySelector('.tl-drop-line'); if (l) l.style.display = 'none';
     const g = tl.querySelector('.tl-drop-ghost'); if (g) g.remove();
+  },
+
+  /* 时间轴边缘自动滚动循环：拖动时若指针停在时间轴可视区上/下边缘，持续滚动时间轴，
+     让被拖的行程块可以滚到显示区域之外去放置。页面整体滚动已在 onDragStart 锁住。 */
+  _startAutoScroll() {
+    if (this._autoScrollRAF) return;
+    if (typeof requestAnimationFrame !== 'function') return;
+    const tick = () => {
+      if (!this._drag || !this._dragScroll || !this._dragScroll.tl) { this._autoScrollRAF = null; return; }
+      const { tl, clientY } = this._dragScroll;
+      const rect = tl.getBoundingClientRect();
+      const edge = 48;
+      if (clientY < rect.top + edge) {
+        tl.scrollTop -= Math.max(1, Math.round((edge - (clientY - rect.top)) * 0.4));
+      } else if (clientY > rect.bottom - edge) {
+        tl.scrollTop += Math.max(1, Math.round((edge - (rect.bottom - clientY)) * 0.4));
+      }
+      this._autoScrollRAF = requestAnimationFrame(tick);
+    };
+    this._autoScrollRAF = requestAnimationFrame(tick);
+  },
+
+  _stopAutoScroll() {
+    if (this._autoScrollRAF) { try { cancelAnimationFrame(this._autoScrollRAF); } catch (_) {} this._autoScrollRAF = null; }
+    this._dragScroll = null;
   },
 
   onDrop(e) {
@@ -484,6 +524,9 @@ app.modules.itinerary = {
     // 无论如何先清空拖拽状态，杜绝「_drag 残留 → 后续所有行程块都拖不动」的卡死。
     const wasDragging = !!this._drag;
     this._drag = null;
+    // 停止边缘自动滚动并解除页面滚动锁定（恢复整页可滚动）
+    this._stopAutoScroll();
+    try { document.documentElement.classList.remove('drag-lock'); document.body.classList.remove('drag-lock'); } catch (_) {}
     document.querySelectorAll('.tl-drop-line').forEach(l => l.style.display = 'none');
     document.querySelectorAll('.tl-drop-ghost').forEach(g => g.remove());
     // 拖拽被取消（未成功 drop）时，恢复折叠视图（expanded 状态在 onDragStart 里改过）。

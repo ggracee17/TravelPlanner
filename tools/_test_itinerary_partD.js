@@ -53,10 +53,10 @@ assert(itin.defaultStart({ spots: [{ startTime: '09:00', durationH: 2 }] }, 2) =
 assert(itin.defaultStart({ spots: [{ startTime: '21:00', durationH: 2 }] }, 2) === '09:00', '当天排满(末块 21:00) → 回退 09:00（修复前为 00:00）');
 assert(itin.defaultStart({ spots: [{ startTime: '23:00', durationH: 2 }] }, 2) === '09:00', '极端排满(末块 23:00) → 仍回退 09:00');
 
-console.log('\n[2) 滚动默认到顶部]');
+console.log('\n[2) 时间轴默认停在 6:00–00:00（最大滚动值，常用行程区间）]');
 const itinSrc = fs.readFileSync(path.join(ROOT, 'module-itinerary.js'), 'utf8');
-assert(/querySelectorAll\('\.timeline'\)\.forEach\(tl => \{\s*tl\.scrollTop = 0;/.test(itinSrc), 'render 设置 timeline.scrollTop = 0');
-assert(!/tl\.scrollTop = ITIN_TL_VIEW_START \* itinHourPx\(\)/.test(itinSrc), '已移除「滚动到底部」旧写法');
+assert(/querySelectorAll\('\.timeline'\)\.forEach\(tl => \{\s*tl\.scrollTop = tl\.scrollHeight - tl\.clientHeight;/.test(itinSrc), 'render 把 timeline 默认滚到最大（显示 6:00–00:00 常用区间）');
+assert(!/tl\.scrollTop = 0;/.test(itinSrc.replace(/\s+/g, ' ')), '不再默认停在顶部（00:00）');
 
 console.log('\n[3) 拖拽硬化：drop 失败也清空 _drag]');
 // 直接验证 onDrop 在 moveSpotToTime 抛错时仍把 _drag 置空（模拟 _drag 已设置）
