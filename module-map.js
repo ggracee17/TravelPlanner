@@ -260,6 +260,35 @@ app.modules.map = {
     return 'failed-new';
   },
 
+  /* 强制用「当前地图链接」的坐标覆盖旧坐标 / 地理编码坐标（点击地点上的「📍 用链接定位」按钮触发）。
+     与 _resolveItemCoord 的区别：无视是否已存在坐标、无视「省 Credits」模式，只要链接能解析出坐标就【强制】覆盖。
+     对应诉求：把原「全站刷新最新数据」按钮下放到每个地图地点，专门用来用新粘贴的地图链接坐标覆盖旧位置。 */
+  async forceResolveFromLinkById(dayId, spotId, isCand) {
+    let target = null;
+    if (isCand) {
+      const c = (app.state.candidates || []).find(x => x.id === spotId);
+      if (!c) { if (app.toast) app.toast('未找到该地点', 'warning'); return; }
+      target = c;
+    } else {
+      const d = app.getActiveDestination();
+      if (!d) { if (app.toast) app.toast('请先选择目的地', 'warning'); return; }
+      const day = (app.state[d.id]?.itinerary || []).find(x => x.id === dayId);
+      const sp = day && (day.spots || []).find(x => x.id === spotId);
+      if (!sp) { if (app.toast) app.toast('未找到该地点', 'warning'); return; }
+      target = sp;
+    }
+    if (!target.mapUrl) { if (app.toast) app.toast('该地点还没有地图链接，无法重新定位', 'warning'); return; }
+    const fromUrl = extractCoordsFromMapUrl(target.mapUrl);
+    if (!fromUrl) { if (app.toast) app.toast('无法从地图链接解析出坐标，请检查链接格式', 'warning'); return; }
+    // 关闭当前可能打开的弹窗，避免指向即将被重建的旧 marker
+    this.closeInfo();
+    target.lat = fromUrl.lat; target.lng = fromUrl.lng;
+    target._geoFailed = false; target._geoFailQ = '';
+    app.saveState();
+    this.rerender();
+    if (app.toast) app.toast('已用地图链接坐标更新该地点位置', 'success');
+  },
+
   /* 离线地理编码缓存：持久化到 localStorage，跨刷新/会话复用，进一步省 Google Geocoding 配额 */
   loadGeoCache() {
     this._geoLoaded = true;
@@ -379,11 +408,13 @@ app.modules.map = {
       const dayPrefix = (mode === '__all' && it.dayIndex >= 0) ? ('Day ' + (it.dayIndex + 1) + ' ') : '';
       const dtText = it.isCand ? '（未加入行程）' : [it.date, s.startTime].filter(Boolean).join(' ');
       const detailCall = `app.modules.itinerary.openTripForm('${it.isCand ? 'cand' : 'spot'}','${it.isCand ? it.spot.id : it.dayId}','${it.spot.id}')`;
+      const reLinkCall = s.mapUrl ? `app.modules.map.forceResolveFromLinkById('${it.dayId}','${it.spot.id}',${it.isCand})` : '';
       const content = `<div style="min-width:190px;max-width:240px">` +
         `<strong>${this._esc(s.name)}</strong>` +
         `<div style="font-size:.72rem;color:#64748b;margin-top:2px">${dayPrefix}${this._esc(dtText)}</div>` +
         `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">` +
           `<button class="btn btn-ghost btn-sm" onclick="${detailCall}">📝 行程详情</button>` +
+          (reLinkCall ? `<button class="btn btn-ghost btn-sm" onclick="${reLinkCall}">📍 用链接定位</button>` : '') +
           `<button class="btn btn-ghost btn-sm" onclick="app.modules.map.toggleHidden('${it.dayId}','${it.spot.id}',${it.isCand});app.modules.map.closeInfo()">${it.hidden ? '👁 显示' : '🙈 隐藏'}</button>` +
         `</div>` +
         (this._mapsUrl(s) ? `<div style="margin-top:6px"><a href="${this._mapsUrl(s)}" target="_blank" rel="noopener" class="text-sky-600 hover:underline" style="font-size:.72rem">🔗 在 Google Maps 打开</a></div>` : '') +
@@ -432,6 +463,9 @@ app.modules.map = {
         ? `<div class="text-tiny text-amber-600 truncate">${app.t('map.unlocated')}</div>`
         : '';
       // 仅地图范围内隐藏/显示：不影响行程库与时间轴
+      const reLinkBtn = s.mapUrl
+        ? `<button class="btn btn-ghost btn-sm shrink-0" onclick="app.modules.map.forceResolveFromLinkById('${it.dayId}','${it.spot.id}',${it.isCand})" title="用该地点地图链接的坐标覆盖当前位置">📍 用链接定位</button>`
+        : '';
       const hideBtn = it.hidden
         ? `<button class="btn btn-ghost btn-sm shrink-0" onclick="app.modules.map.toggleHidden('${it.dayId}','${it.spot.id}',${it.isCand})">👁 显示</button>`
         : `<button class="btn btn-ghost btn-sm shrink-0" onclick="app.modules.map.toggleHidden('${it.dayId}','${it.spot.id}',${it.isCand})">🙈 隐藏</button>`;
@@ -441,7 +475,10 @@ app.modules.map = {
           <div class="truncate">${dayTag}${nameHtml}${linkBtn} <span class="text-tiny text-slate-400">${s.startTime || ''}</span></div>
           ${hint}
         </div>
-        ${hideBtn}
+        <div class="flex flex-col gap-1 items-end shrink-0">
+          ${reLinkBtn}
+          ${hideBtn}
+        </div>
       </div>`;
     }).join('') + `</div>`;
   },

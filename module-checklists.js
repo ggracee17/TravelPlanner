@@ -112,6 +112,7 @@ app.modules.checklists = {
         <div class="card-title">
           <span>📋 ${app.t('todo.title')}（${app.t('checklist.checked')} ${todoDone} / ${todos.length}）</span>
           <div class="ml-auto flex gap-2">
+            ${todoDone > 0 ? `<button class="btn btn-ghost btn-sm" onclick="app.modules.checklists.clearCompletedTodos()" title="删除所有已打勾的待办，缩短列表">🧹 清除已完成</button>` : ''}
             <button class="btn btn-primary btn-sm" onclick="app.modules.checklists.addTodo()">${app.t('todo.add')}</button>
           </div>
         </div>
@@ -343,6 +344,18 @@ app.modules.checklists = {
     app.state.checklists.todos = app.state.checklists.todos.filter(x => x.id !== id);
     app.saveState();
     this.render();
+  },
+
+  /* 清除所有已完成的待办事项（缩短任务列表）。仅在有已完成项时显示按钮；带二次确认。 */
+  clearCompletedTodos() {
+    const todos = app.state.checklists.todos || [];
+    const done = todos.filter(x => x.done);
+    if (done.length === 0) { app.toast('没有已完成的待办事项', 'info'); return; }
+    if (!confirm(`确定清除 ${done.length} 条已完成的待办事项？清除后无法恢复。`)) return;
+    app.state.checklists.todos = todos.filter(x => !x.done);
+    app.saveState();
+    this.render();
+    app.toast(`已清除 ${done.length} 条已完成待办`, 'success');
   },
 
   reset() {

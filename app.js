@@ -386,7 +386,8 @@ const app = {
     return !!(r && r.innerHTML && r.innerHTML.trim());
   },
 
-  // 主动从服务端拉取最新看板（多人协作时，一键同步协作者刚保存的内容；也用于「刷新最新数据」按钮）。
+  // 主动从服务端拉取最新看板（多人协作时，一键同步协作者刚保存的内容）。
+  // 注意：原全站「刷新最新数据」按钮已移除（改为每个地图地点上的「📍 用链接定位」），此方法保留为公共 API。
   // 仅在后端模式 + 已登录 + 本地有缓存快照时才可用（无缓存即本地即权威，无需刷新）。
   refreshFromServer() {
     if (!this.backend.enabled || !this.sessionToken) return;
@@ -403,8 +404,6 @@ const app = {
 
   updateStatus(extra) {
     const el = document.getElementById('boardStatus');
-    const rb = document.getElementById('refreshBoardBtn');
-    if (rb) { try { rb.classList.toggle('hidden', !(this.backend && this.backend.enabled) || !localStorage.getItem(CACHE_KEY)); } catch (e) { rb.classList.add('hidden'); } }
     if (!el) return;
     if (!this.backend.enabled) { el.classList.add('hidden'); el.textContent = ''; this._renderAccountBar(); return; }
     el.classList.remove('hidden');

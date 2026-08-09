@@ -39,8 +39,7 @@
       <!-- 中英切换：暂时隐藏（app.i18nEnabled=false）；需要时把 hidden 去掉并把该开关改为 true -->
       <button id="langToggle" class="btn btn-ghost btn-sm hidden" onclick="app.toggleLang()" data-i18n="lang.toggle">🌐 EN</button>
       <button class="btn btn-success btn-sm" onclick="app.openBackupDialog()" data-i18n="header.backup">💾 备份/恢复</button>
-      <!-- 「刷新最新数据」：后端模式下，从服务端重新拉取协作者刚保存的最新看板（本地有缓存才显示） -->
-      <button id="refreshBoardBtn" class="btn btn-ghost btn-sm hidden" onclick="app.refreshFromServer()" title="从服务端重新拉取最新数据（多人协作时同步他人刚保存的内容）">🔄 刷新最新数据</button>
+      <!-- 「刷新最新数据」已下放到每个地图地点（点击地点上的「📍 用链接定位」按钮，用新地图链接坐标覆盖旧坐标），此处不再保留全站刷新按钮 -->
       <!-- 「📥 一键导出全部 Excel」按钮已按需求移除；app.exportAll() 仍保留，
            各板块（记账 / 核对清单）自带的导出按钮不受影响。 -->
     </div>
