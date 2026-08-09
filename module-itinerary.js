@@ -187,8 +187,13 @@ app.modules.itinerary = {
     const win = this.dayWindow(day, expanded);
     const hpx = itinHourPx();
     const allSpots = day.spots || [];
-    // 不再过滤 6 点前的行程：清晨航班 / 日出 / 深夜抵达等活动照常画在行程表（仅在时间轴顶部对齐），避免「已加入却看不到」
-    const spots = allSpots;
+    // 仅显示与当前时间轴窗口 [win.start, win.end] 有交叠的行程块：完全落在窗口之前的整块不显示
+    //（如 0:10–5:00 不画），跨过窗口起点的块按窗口裁切显示（如 0:10–12:10 只画 6:00–12:10 这一段）。
+    const spots = allSpots.filter(s => {
+      const st = itinTimeToNum(s.startTime);
+      const en = st + (parseFloat(s.durationH) || 1);
+      return en > win.start && st < win.end;
+    });
     const laneMap = this.computeLanes(spots);
     const totalTicket = spots.reduce((s, x) => s + (parseFloat(x.ticket) || 0), 0);
     const hours = [];
@@ -232,14 +237,25 @@ app.modules.itinerary = {
     const meta = ITIN_TYPES[s.type] || ITIN_TYPES.other;
     const hpx = itinHourPx();
     const span = win.end - win.start;
-    let top = (itinTimeToNum(s.startTime) - win.start) * hpx;
-    top = Math.max(0, Math.min(top, span * hpx - hpx));
-    let h = Math.max(parseFloat(s.durationH) || 1, 0.5) * hpx;
-    h = Math.min(h, span * hpx - top);
+    const dur = parseFloat(s.durationH) || 1;
+    // 将行程块裁切到时间轴窗口 [win.start, win.end]：外层已过滤掉完全不交叠的整块；
+    // 跨过窗口起点的块（如 0:10–12:10）只显示窗口内的部分（6:00–12:10）。
+    const stN = itinTimeToNum(s.startTime);
+    const enN = stN + dur;
+    const visStart = Math.max(stN, win.start);
+    const visEnd = Math.min(enN, win.end);
+    const clippedStart = stN < win.start - 1e-6;
+    const clippedEnd = enN > win.end + 1e-6;
+    let top = (visStart - win.start) * hpx;
+    let h = Math.max((visEnd - visStart) * hpx, 24);
     const dispH = Math.max(h, 26);
     const isShort = dispH < 50;    // < ~1 小时：隐藏标签，缩小字号
     const isXShort = dispH < 30;   // < ~0.5 小时：连时间也隐藏，只留名称
-    const dur = parseFloat(s.durationH) || 1;
+    // 裁切后的显示时间范围：跨过窗口起点的块（0:10–12:10）显示「6:00–12:10」，
+    // 跨过窗口终点的块（20:00–26:00）显示「20:00–24:00」；未裁切时按原始终止时间。
+    // 时长仍显示行程计划总时长（如 12h），便于阅读者知道整段行程长度，仅起止时间按窗口裁切。
+    const dispStart = clippedStart ? itinNumToTime(visStart) : (s.startTime || '--:--');
+    const dispEnd = clippedEnd ? itinNumToTime(visEnd) : (s.endTime || itinEndTime(s.startTime, dur));
     // 重叠分栏：同一时间簇内的块按 lane 左右排列，互不重叠；不重叠的保持整宽
     const lane = laneInfo ? laneInfo.lane : 0;
     const lanes = laneInfo ? laneInfo.lanes : 1;
@@ -273,7 +289,7 @@ app.modules.itinerary = {
       <div class="tl-block-main">
         ${!isXShort && s.travelFromPrev ? `<div class="tl-travel">${this.travelIcon(s.travelFromPrev.mode)} ${s.travelFromPrev.durText}${s.travelFromPrev.distText ? ' · ' + s.travelFromPrev.distText : ''}${s.travelFromPrev.unavailable ? '（无法计算）' : '　距上一站'}</div>` : ''}
         <div class="tl-block-title">${s.name || '未命名'}</div>
-        ${isXShort ? '' : `<div class="tl-block-time">${s.startTime || '--:--'}–${s.endTime || itinEndTime(s.startTime, dur)} · ${dur}h</div>`}
+        ${isXShort ? '' : `<div class="tl-block-time">${dispStart}–${dispEnd} · ${dur}h</div>`}
         ${flags ? `<div class="tl-flags">${flags}</div>` : ''}
       </div>
       </div>`;
