@@ -68,7 +68,7 @@ function setup() {
 console.log('\n[测试] 24 小时开放：详情每日时间段也变成「每天 00:00~24:00」');
 const html24 = itin._commonFields({ name: 'X', type: 'restaurant', alwaysOpen: true, dailyHours: {} });
 assert(/id="t_24h"[^>]*checked/.test(html24), '表单中「24 小时开放」勾选框为勾选状态');
-assert(html24.includes('value="24:00" selected'), '每日营业时间的「结束」下拉默认选中 24:00（每天全天）');
+assert(html24.includes('class="t_dh_close" value="24:00"') && html24.includes('value="24" selected'), '每日营业时间的「结束」默认 24:00（小时段选 24，隐藏输入 24:00）');
 assert((html24.match(/disabled/g) || []).length >= 14, '每日 7 行时间框均被禁用（锁定为全天）');
 assert(html24.includes('每天均按 <strong>00:00~24:00（全天）</strong>'), '显示「每天 00:00~24:00 全天」提示');
 

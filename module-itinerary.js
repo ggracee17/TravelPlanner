@@ -1,6 +1,6 @@
 /* ============================================================
    板块2：每日行程表（时间轴 · 可拖拽版本）
-   每天 = 一条时间轴（默认只显示有行程的部分，可展开 06:00–24:00），
+   每天 = 一条 00:00–24:00 时间轴，可上下滚动；默认滚动到 6:00，向上滚动可见 6:00 之前（含凌晨行程）。
    行程以"块"形式落在时间上。各天<strong>横向排列</strong>，可左右滚动。
    每个块按分类着色：餐饮(红) / 酒店(紫) / 景点(蓝) / 交通(青) / 购物(橙) / 娱乐(靛) / 拍照(青绿) / 甜品(品红) / 小吃(橙) / 活动(绿) / 其他(灰)。
    块上显示 名称 + 时间段；拖动块可改时间或跨日移动（对齐线落在块的<strong>开始</strong>时间）；
@@ -9,8 +9,9 @@
    ============================================================ */
 
 /* ===== 时间轴常量 & 工具（全局，供内联 ondrop 等调用） ===== */
-const ITIN_TL_START = 6;     // 时间轴起点 06:00
+const ITIN_TL_START = 0;     // 时间轴起点 00:00（完整全天）
 const ITIN_TL_END = 24;      // 时间轴终点 24:00
+const ITIN_TL_VIEW_START = 6; // 默认可视区顶部（6:00）；向上滚动可见 6:00 之前（含凌晨行程）
 
 function itinHourPx() {
   const z = (typeof app !== 'undefined' && app.state && app.state.itineraryZoom) || 'normal';
@@ -147,7 +148,7 @@ app.modules.itinerary = {
           当前目的地：<strong class="text-sky-700">${app.destName(d)}</strong>　·　共 <strong>${app.dateDiff(d.startDate, d.endDate)}</strong> 天　·　已规划 <strong>${days.length}</strong> 天。
           下方为<strong>横向时间轴</strong>：每天一条时间轴，各天并排可左右滚动；每个行程块按分类着色
           （餐饮红 / 酒店紫 / 景点蓝 / 交通青 / 购物橙 / 娱乐靛 / 拍照青绿 / 甜品品红 / 小吃橙 / 活动绿 / 其他灰），<strong>拖动块</strong>即可改时间或换到别的日期
-          （对齐线落在块的<strong>开始时间</strong>处）。时间轴默认只显示有行程的时段，点「🔽 展开全部时间」查看完整 06:00–24:00。
+          （对齐线落在块的<strong>开始时间</strong>处）。时间轴为完整 00:00–24:00，默认滚动到 6:00；向上滚动可见 6:00 之前的凌晨行程，凌晨行程块同样可以拖动。
         </p>
 
         ${days.length === 0 ? `
@@ -162,6 +163,8 @@ app.modules.itinerary = {
           </div>
         `}
       </div>`;
+    // 默认把每条时间轴滚动到 6:00 处（向上可看 6:00 之前的凌晨行程）
+    try { sec.querySelectorAll('.timeline').forEach(tl => { tl.scrollTop = ITIN_TL_VIEW_START * itinHourPx(); }); } catch (_) {}
   },
 
   toggleZoom() {
@@ -176,8 +179,8 @@ app.modules.itinerary = {
     this.render();
   },
 
-  /* 时间轴固定显示 06:00–24:00：每天等长，且早于 6 点的行程不画在行程表上（保持各天长度一致）。
-     注：此前为支持凌晨行程曾允许窗口起点 < 6，现已按需求改回固定窗口。 */
+  /* 时间轴为完整 00:00–24:00：每天等长，所有行程（含 6 点以前的凌晨行程）都渲染并可拖动。
+     默认可视区从 6:00 起，向上滚动可见更早时段（这也是修复「6 点前行程无法移动」的根因）。 */
   dayWindow(day, expanded) {
     return { start: ITIN_TL_START, end: ITIN_TL_END };
   },
@@ -187,8 +190,8 @@ app.modules.itinerary = {
     const win = this.dayWindow(day, expanded);
     const hpx = itinHourPx();
     const allSpots = day.spots || [];
-    // 仅显示与当前时间轴窗口 [win.start, win.end] 有交叠的行程块：完全落在窗口之前的整块不显示
-    //（如 0:10–5:00 不画），跨过窗口起点的块按窗口裁切显示（如 0:10–12:10 只画 6:00–12:10 这一段）。
+    // 完整 00:00–24:00 时间轴：渲染所有与窗口 [win.start, win.end] 有交叠的行程块。
+    // 6 点以前的凌晨行程也照常渲染（位于 0:00 附近），向上滚动时间轴即可看到并拖动。
     const spots = allSpots.filter(s => {
       const st = itinTimeToNum(s.startTime);
       const en = st + (parseFloat(s.durationH) || 1);
@@ -198,7 +201,9 @@ app.modules.itinerary = {
     const totalTicket = spots.reduce((s, x) => s + (parseFloat(x.ticket) || 0), 0);
     const hours = [];
     for (let h = win.start; h < win.end; h++) hours.push(h);
-    const tlHeight = (win.end - win.start) * hpx;
+    const contentH = (win.end - win.start) * hpx;
+    const viewportH = (ITIN_TL_END - ITIN_TL_VIEW_START) * hpx;
+    const defaultScroll = ITIN_TL_VIEW_START * hpx;
 
     return `
       <div class="day-card">
@@ -220,7 +225,7 @@ app.modules.itinerary = {
               ${day.hotel?.name ? `🏨 <strong>${day.hotel.name}</strong>` : ''}
               ${day.dining ? `<span class="ml-2">🍽️ ${day.dining}</span>` : ''}
             </div>` : ''}
-          <div class="timeline" data-day-id="${day.id}" data-win-start="${win.start}" data-win-end="${win.end}" style="height:${tlHeight}px; --tl-hour:${hpx}px"
+          <div class="timeline" data-day-id="${day.id}" data-win-start="${win.start}" data-win-end="${win.end}" data-default-scroll="${defaultScroll}" style="height:${viewportH}px; --tl-hour:${hpx}px"
                ondragover="app.modules.itinerary.onDragOver(event)"
                ondrop="app.modules.itinerary.onDrop(event)"
                ondragleave="app.modules.itinerary.onDragLeave(event)">
@@ -285,7 +290,7 @@ app.modules.itinerary = {
            ondragend="app.modules.itinerary.onDragEnd(event)"
            onclick="app.modules.itinerary.openTripForm('spot','${day.id}','${s.id}')"
            title="${title}">
-        <div class="tl-block-cat-v">${meta.label}</div>
+        <div class="tl-block-cat-v">${[...meta.label].map(ch => `<span>${ch}</span>`).join('')}</div>
       <div class="tl-block-main">
         ${!isXShort && s.travelFromPrev ? `<div class="tl-travel">${this.travelIcon(s.travelFromPrev.mode)} ${s.travelFromPrev.durText}${s.travelFromPrev.distText ? ' · ' + s.travelFromPrev.distText : ''}${s.travelFromPrev.unavailable ? '（无法计算）' : '　距上一站'}</div>` : ''}
         <div class="tl-block-title">${s.name || '未命名'}</div>
@@ -411,7 +416,7 @@ app.modules.itinerary = {
     const hpx = itinHourPx();
     const rect = tl.getBoundingClientRect();
     const y = e.clientY - rect.top;
-    let hour = itinSnap(ws + y / hpx);
+    let hour = itinSnap(ws + (y + (tl.scrollTop || 0)) / hpx);
     hour = Math.max(ws, Math.min(we - 0.5, hour));
 
     // 只保留当前时间轴上的指示，其余隐藏
@@ -451,7 +456,7 @@ app.modules.itinerary = {
     const hpx = itinHourPx();
     const rect = tl.getBoundingClientRect();
     const y = e.clientY - rect.top;
-    let hour = itinSnap(ws + y / hpx);
+    let hour = itinSnap(ws + (y + (tl.scrollTop || 0)) / hpx);
     hour = Math.max(ws, Math.min(we - 0.5, hour));
     this.moveSpotToTime(from.spotId, tl.dataset.dayId, itinNumToTime(hour));
     this._drag = null;
@@ -741,6 +746,90 @@ app.modules.itinerary = {
     return o;
   },
 
+  /* ===== 两段式时间选择器（先选小时，再选分钟，避免单一下拉 288 个选项）=====
+     - schedTimeParts：用于行程块「开始/结束」（唯一 id，隐藏输入 t_start / t_end）。
+     - bizTimeParts：用于营业时间类（按 class 定位，支持一个表单内多组：分段 / 每日）。 */
+
+  /* 行程块 开始/结束 两段式选择器。
+     name: 'start' | 'end'（隐藏输入 id = t_<name>；小时/分钟 select id = t_<name>_h / t_<name>_m）。 */
+  schedTimeParts(name, value) {
+    let hh = '09', mm = '00';
+    if (value && /^\d{1,2}:\d{2}$/.test(value)) { const p = value.split(':'); hh = String(parseInt(p[0], 10)).padStart(2, '0'); mm = p[1]; }
+    const sel = (v) => String(v).padStart(2, '0');
+    let hO = ''; for (let h = 0; h < 24; h++) { const v = sel(h); hO += `<option value="${v}" ${v === hh ? 'selected' : ''}>${v}</option>`; }
+    let mO = ''; for (let m = 0; m < 60; m += 5) { const v = sel(m); mO += `<option value="${v}" ${v === mm ? 'selected' : ''}>${v}</option>`; }
+    return `<span class="time-parts">
+      <select id="t_${name}_h" class="tp-sel" style="width:auto" onchange="app.modules.itinerary.onSchedTimePartChange('${name}')">${hO}</select><span class="tp-colon">:</span><select id="t_${name}_m" class="tp-sel" style="width:auto" onchange="app.modules.itinerary.onSchedTimePartChange('${name}')">${mO}</select>
+      <input type="hidden" id="t_${name}" value="${value || ''}" />
+    </span>`;
+  },
+
+  /* 营业时间类（分段 / 每日）两段式选择器。
+     cls: 隐藏输入 + 收集用的 class（如 't_hours_open' / 't_dh_open'）；value: 'HH:MM' 或 ''。
+     opts: { step, allowEmpty, allow24, disabled } */
+  bizTimeParts(cls, value, opts) {
+    opts = opts || {};
+    const step = opts.step || 5;
+    let hh = '', mm = '';
+    if (value && /^\d{1,2}:\d{2}$/.test(value)) { const p = value.split(':'); hh = String(parseInt(p[0], 10)).padStart(2, '0'); mm = p[1]; }
+    const sel = (v) => String(v).padStart(2, '0');
+    let hO = '';
+    if (opts.allowEmpty) hO += '<option value="">— 不填 —</option>';
+    const maxH = opts.allow24 ? 24 : 23;
+    for (let h = 0; h <= maxH; h++) { const v = sel(h); hO += `<option value="${v}"${v === hh ? ' selected' : ''}>${v}</option>`; }
+    let mO = '';
+    if (opts.allowEmpty) mO += '<option value="">— 不填 —</option>';
+    for (let m = 0; m < 60; m += step) { const v = sel(m); mO += `<option value="${v}"${v === mm ? ' selected' : ''}>${v}</option>`; }
+    const dis = opts.disabled ? ' disabled' : '';
+    return `<span class="time-parts">
+      <select class="${cls}_h tp-sel" style="width:auto"${dis} onchange="app.modules.itinerary.onBizTimePartChange(this,'${cls}')">${hO}</select><span class="tp-colon">:</span><select class="${cls}_m tp-sel" style="width:auto"${dis} onchange="app.modules.itinerary.onBizTimePartChange(this,'${cls}')">${mO}</select>
+      <input type="hidden" class="${cls}" value="${value || ''}"${dis} />
+    </span>`;
+  },
+
+  /* 行程块 开始/结束：小时/分钟两段联动隐藏输入 t_start / t_end，再触发开始/结束联动 */
+  onSchedTimePartChange(name) {
+    const h = document.getElementById('t_' + name + '_h');
+    const m = document.getElementById('t_' + name + '_m');
+    const hidden = document.getElementById('t_' + name);
+    if (h && m && hidden) hidden.value = String(h.value).padStart(2, '0') + ':' + String(m.value).padStart(2, '0');
+    this.onSchedChange(name === 'start' ? 'start' : 'end');
+  },
+
+  /* 营业时间：小时/分钟两段联动隐藏输入（按 class 定位） */
+  onBizTimePartChange(sel, cls) {
+    const row = sel.closest && sel.closest('[data-seg],[data-dh]') || sel.parentElement;
+    if (!row) return;
+    const h = row.querySelector('.' + cls + '_h');
+    const m = row.querySelector('.' + cls + '_m');
+    const hidden = row.querySelector('.' + cls);
+    if (h && m && hidden) hidden.value = String(h.value).padStart(2, '0') + ':' + String(m.value).padStart(2, '0');
+  },
+
+  /* 把隐藏输入 t_<name> 的 HH:MM 同步到对应的小时/分钟两段 select（防止联动后两段显示不一致） */
+  syncTimePicker(name) {
+    const hidden = document.getElementById('t_' + name);
+    const hSel = document.getElementById('t_' + name + '_h');
+    const mSel = document.getElementById('t_' + name + '_m');
+    if (!hidden || !hSel || !mSel) return;
+    const v = hidden.value || '00:00';
+    const p = v.split(':');
+    const hh = (p[0] || '00').padStart(2, '0');
+    const mm = (p[1] || '00').padStart(2, '0');
+    if (hSel.value !== hh) hSel.value = hh;
+    if (mSel.value !== mm) mSel.value = mm;
+  },
+
+  /* 设置一组营业时间（隐藏输入 + 两段 select），并可选禁用（用于 24 小时开放锁定） */
+  setBizTime(row, cls, val, disabled) {
+    const hidden = row.querySelector('.' + cls);
+    const h = row.querySelector('.' + cls + '_h');
+    const m = row.querySelector('.' + cls + '_m');
+    if (hidden) { hidden.value = val || ''; hidden.disabled = !!disabled; }
+    if (h) { h.value = (val && val.split(':')[0]) || ''; h.disabled = !!disabled; }
+    if (m) { m.value = (val && val.split(':')[1]) || ''; m.disabled = !!disabled; }
+  },
+
   /* 解析旧版营业时间字符串为分段数组；支持 "09:00-22:00" 及多段用 , ; 、 或换行分隔 */
   parseLegacyHours(str) {
     if (!str || typeof str !== 'string') return [];
@@ -773,9 +862,8 @@ app.modules.itinerary = {
   clearDailyHour(btn) {
     const row = btn.closest && btn.closest('[data-dh]');
     if (!row) return;
-    const o = row.querySelector('.t_dh_open'), c = row.querySelector('.t_dh_close');
-    if (o) o.value = '';
-    if (c) c.value = '';
+    this.setBizTime(row, 't_dh_open', '', false);
+    this.setBizTime(row, 't_dh_close', '', false);
   },
 
   /* 单个营业时间分段的行（开放/结束两个下拉 + 删除） */
@@ -783,9 +871,9 @@ app.modules.itinerary = {
     seg = seg || {};
     return `
       <div class="flex gap-2 items-center mb-1" data-seg="${i}">
-        <select class="t_hours_open flex-1">${this.itinTimeOptions(seg.open, 5)}</select>
+        ${this.bizTimeParts('t_hours_open', seg.open, { step: 5 })}
         <span class="text-slate-500">~</span>
-        <select class="t_hours_close flex-1">${this.itinTimeOptions(seg.close, 5)}</select>
+        ${this.bizTimeParts('t_hours_close', seg.close, { step: 5, allow24: true })}
         <button type="button" class="btn btn-ghost btn-sm" onclick="app.modules.itinerary.removeHoursSeg(this)">🗑️</button>
       </div>`;
   },
@@ -835,18 +923,13 @@ app.modules.itinerary = {
               // 24 小时开放时，每天固定为 00:00~24:00（全天）并锁定编辑；否则每天默认「不填」沿用通用营业时间
               const dhOpenSel = s.alwaysOpen ? '00:00' : (seg ? seg.open : '');
               const dhCloseSel = s.alwaysOpen ? '24:00' : (seg ? seg.close : '');
-              const dhDisabled = s.alwaysOpen ? 'disabled' : '';
-              const dhOpts = (sel) => {
-                const base = '<option value="">— 不填 —</option>' + this.itinTimeOptions(sel && sel !== '24:00' ? sel : '', 5);
-                const o24 = (sel === '24:00') ? '<option value="24:00" selected>24:00</option>' : '<option value="24:00">24:00</option>';
-                return base + o24;
-              };
+              const dhDisabled = !!s.alwaysOpen;
               return `
               <div class="flex gap-2 items-center mb-1" data-dh="${wd}">
                 <span class="w-10 text-slate-600 text-sm shrink-0">${label}</span>
-                <select class="t_dh_open flex-1" ${dhDisabled}>${dhOpts(dhOpenSel)}</select>
+                ${this.bizTimeParts('t_dh_open', dhOpenSel, { step: 5, allowEmpty: true, disabled: dhDisabled })}
                 <span class="text-slate-500">~</span>
-                <select class="t_dh_close flex-1" ${dhDisabled}>${dhOpts(dhCloseSel)}</select>
+                ${this.bizTimeParts('t_dh_close', dhCloseSel, { step: 5, allowEmpty: true, allow24: true, disabled: dhDisabled })}
                 <button type="button" class="btn btn-ghost btn-sm shrink-0" onclick="app.modules.itinerary.clearDailyHour(this)">清除</button>
               </div>`;
             }).join('')}
@@ -907,12 +990,12 @@ app.modules.itinerary = {
       ${daySel}
       <div id="schedTimeWrap" class="${timeWrapCls}">
         <div class="form-field">
-          <label>开始时间（24 小时制）</label>
-          <select id="t_start" onchange="app.modules.itinerary.onSchedChange('start')">${this.itinTimeOptions(s.startTime || '09:00', 5)}</select>
+          <label>开始时间（先选小时，再选分钟）</label>
+          ${this.schedTimeParts('start', s.startTime || '09:00')}
         </div>
         <div class="form-field">
-          <label>结束时间（24 小时制）</label>
-          <select id="t_end" onchange="app.modules.itinerary.onSchedChange('end')">${this.itinTimeOptions(s.endTime || '', 5)}</select>
+          <label>结束时间（先选小时，再选分钟）</label>
+          ${this.schedTimeParts('end', s.endTime || '00:00')}
         </div>
       </div>
       <div class="form-field"><label>门票(¥)</label><input type="number" id="t_ticket" min="0" value="${s.ticket || 0}" /></div>
@@ -946,11 +1029,13 @@ app.modules.itinerary = {
     const rows = typeof document.querySelectorAll === 'function'
       ? document.querySelectorAll('#t_daily_hours [data-dh]') : [];
     rows.forEach(row => {
-      const o = row.querySelector ? row.querySelector('.t_dh_open') : null;
-      const c = row.querySelector ? row.querySelector('.t_dh_close') : null;
-      if (!o || !c) return;
-      if (on) { o.value = '00:00'; c.value = '24:00'; o.disabled = true; c.disabled = true; }
-      else { o.disabled = false; c.disabled = false; o.value = ''; c.value = ''; }
+      if (on) {
+        this.setBizTime(row, 't_dh_open', '00:00', true);
+        this.setBizTime(row, 't_dh_close', '24:00', true);
+      } else {
+        this.setBizTime(row, 't_dh_open', '', false);
+        this.setBizTime(row, 't_dh_close', '', false);
+      }
     });
   },
 
@@ -970,12 +1055,16 @@ app.modules.itinerary = {
       let startN = eN - dur;
       if (startN < 0)       startN = 0;
       startEl.value = itinNumToTime(startN);
+      this.syncTimePicker('start');
+      this.syncTimePicker('end');
       return;
     }
     const dur = Math.max(0.5, parseFloat(durEl.value) || 1);
     let endN = stN + dur;
     if (endN > 23 + 55 / 60) endN = 23 + 55 / 60; // 不超过 23:55
     endEl.value = itinNumToTime(endN);
+    this.syncTimePicker('start');
+    this.syncTimePicker('end');
   },
 
 

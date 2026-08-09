@@ -459,7 +459,8 @@ table.data-table tr:hover td { background: #f8fafc; }
       #eef2f7 var(--tl-hour, 44px));
   border: 1px solid #e2e8f0;
   border-radius: 0.5rem;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .tl-hour { position: relative; height: var(--tl-hour, 44px); }
 .tl-label {
@@ -500,15 +501,20 @@ table.data-table tr:hover td { background: #f8fafc; }
   font-size: 0.62rem; line-height: 1.2; color: #0e7490; margin-top: 2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.95;
 }
-/* 分类小字：置于行程块左侧，竖排显示 */
+/* 分类小字：置于行程块左侧，竖排显示（逐字堆叠，避免 vertical-rl 在 flex 下出现顺序颠倒） */
 .tl-block-cat-v {
   flex: none;
-  writing-mode: vertical-rl;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
   width: 15px;
-  font-size: 0.58rem; font-weight: 700; line-height: 1;
+  font-size: 0.58rem; font-weight: 700; line-height: 1.05;
   border-radius: 0.25rem; padding: 2px 0;
 }
+.tl-block-cat-v > span { display: block; }
+
+/* 两段式时间选择器（先选小时，再选分钟） */
+.time-parts { display: inline-flex; align-items: center; gap: 2px; }
+.tp-sel { width: auto; padding: 2px 4px; font-size: 0.8rem; }
+.tp-colon { color: #94a3b8; font-weight: 700; }
 .blk-restaurant .tl-block-cat-v { color:#ef4444; background: rgba(239,68,68,.14); }
 .blk-hotel      .tl-block-cat-v { color:#a855f7; background: rgba(168,85,247,.14); }
 .blk-spot       .tl-block-cat-v { color:#3b82f6; background: rgba(59,130,246,.14); }
