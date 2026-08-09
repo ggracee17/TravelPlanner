@@ -86,5 +86,21 @@ assert(/\.blk-shopping\s+\.tl-block-cat-v\s*\{\s*color:#a16207/.test(css), '购�
 assert(/\.blk-shopping\s*\{[^}]*border-left-color:\s*#eab308/.test(css), '购物块左边框为黄(#eab308)');
 assert(/\.blk-snack\s*\{[^}]*border-left-color:\s*#f97316/.test(css), '小吃仍为橙(#f97316)');
 
+console.log('\n[5) 新行程默认结束时间 = 开始 + 时长（9:00 + 2h → 11:00）]');
+const schedHtml = itin._schedFields({ startTime: '09:00', durationH: 2 });
+assert(/id="t_start" value="09:00"/.test(schedHtml), '新行程开始时间默认 09:00');
+assert(/id="t_end" value="11:00"/.test(schedHtml), '新行程(09:00/2h) 结束时间默认 11:00');
+const schedHtml2 = itin._schedFields({ startTime: '09:00', durationH: 1 });
+assert(/id="t_end" value="10:00"/.test(schedHtml2), '新行程(09:00/1h) 结束时间默认 10:00');
+const schedHtml3 = itin._schedFields({ startTime: '13:30', durationH: 2 });
+assert(/id="t_end" value="15:30"/.test(schedHtml3), '新行程(13:30/2h) 结束时间默认 15:30（链式一致）');
+const schedHtml4 = itin._schedFields({ startTime: '09:00', durationH: 2, endTime: '20:00' });
+assert(/id="t_end" value="20:00"/.test(schedHtml4), '已填 endTime 时尊重原值（不覆盖为 11:00）');
+
+console.log('\n[6) 时间轴默认滚动在布局完成后应用（双重 rAF），刷新即停在 6:00–00:00]');
+const itinSrc2 = fs.readFileSync(path.join(ROOT, 'module-itinerary.js'), 'utf8');
+assert(/const applyDefaultScroll = \(\) =>/.test(itinSrc2), 'render 抽出 applyDefaultScroll 函数包裹滚动逻辑');
+assert(/requestAnimationFrame\(\(\) => requestAnimationFrame\(applyDefaultScroll\)\)/.test(itinSrc2), 'render 用双重 requestAnimationFrame 等布局就绪后再设 scrollTop（修复刷新后停在 0:00）');
+
 console.log('\n===== 结果: ' + (failed === 0 ? '全部通过 (' + passed + ')' : failed + ' 项失败') + ' =====');
 process.exit(failed === 0 ? 0 : 1);

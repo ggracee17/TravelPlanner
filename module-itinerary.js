@@ -165,14 +165,23 @@ app.modules.itinerary = {
       </div>`;
         // 默认把每条时间轴滚动到「6:00–00:00」区段（即最大滚动值）：因为大部分行程在 6:00 之后，
     // 这样默认就停在常用区间，免去每次手动拖到最底；向上滚动仍可看到 6:00 之前的凌晨行程。
-    // 使用显式默认滚动偏移（data-default-scroll = 6h），不依赖 scrollHeight 求值，真实浏览器中更稳定。
-    try {
-      sec.querySelectorAll('.timeline').forEach(tl => {
-        const target = parseFloat(tl.getAttribute('data-default-scroll')) || 0;
-        const max = tl.scrollHeight - tl.clientHeight;
-        tl.scrollTop = max > 0 ? Math.min(target, max) : target;
-      });
-    } catch (_) {}
+    // 使用显式默认滚动偏移（data-default-scroll = 6h）。关键：必须等 innerHTML 写入后、浏览器
+    // 完成首帧布局再设置 scrollTop——否则紧跟 innerHTML 的同步赋值在布局未就绪时会被浏览器重置为 0
+    // （表现为刷新后停在 0:00，直到拖拽等再次 render 才修正）。用双重 rAF 等布局就绪再应用。
+    const applyDefaultScroll = () => {
+      try {
+        sec.querySelectorAll('.timeline').forEach(tl => {
+          const target = parseFloat(tl.getAttribute('data-default-scroll')) || 0;
+          const max = tl.scrollHeight - tl.clientHeight;
+          tl.scrollTop = max > 0 ? Math.min(target, max) : target;
+        });
+      } catch (_) {}
+    };
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => requestAnimationFrame(applyDefaultScroll));
+    } else {
+      applyDefaultScroll();
+    }
   },
 
   toggleZoom() {
@@ -1057,7 +1066,7 @@ app.modules.itinerary = {
         </div>
         <div class="form-field">
           <label>结束时间（先选小时，再选分钟）</label>
-          ${this.schedTimeParts('end', s.endTime || '00:00')}
+          ${this.schedTimeParts('end', s.endTime || itinEndTime(s.startTime || '09:00', s.durationH || 1))}
         </div>
       </div>
       <div class="form-field"><label>门票(¥)</label><input type="number" id="t_ticket" min="0" value="${s.ticket || 0}" /></div>
