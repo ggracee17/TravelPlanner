@@ -125,5 +125,19 @@ assert(colHtml.includes('台北→珀斯 航班'), '清晨航班（05:00）出�
 assert(colHtml.includes('下午自由活动'), '普通行程块正常渲染');
 assert((colHtml.match(/class="tl-block /g) || []).length === 2, '两张行程块均渲染（清晨航班不再被过滤成 1 个）');
 
+/* ===== 4) 修复 bug：24 小时开放（00:00~24:00）的跨午夜夜间行程不再误报「非营业」 ===== */
+console.log('\n[测试] 24 小时开放：跨午夜夜间行程不误报非营业（如「台北到悉尼」夜间航班）');
+// 显式全天营业段：白天普通行程
+assert(itin.outsideHours('09:00', 2, [{ open: '00:00', close: '24:00' }]) === null, '24h 开放·白天行程 → 无经营时间警告');
+// 跨午夜夜间行程（22:00 出发、10h 到次日 08:00）：此前因 en>24 被误判为非营业
+assert(itin.outsideHours('22:00', 10, [{ open: '00:00', close: '24:00' }]) === null, '24h 开放·跨午夜夜间行程 → 仍无警告（修复点）');
+// 等价写法 00:00~00:00（午夜到午夜）也视为全天
+assert(itin.outsideHours('23:30', 1, [{ open: '00:00', close: '00:00' }]) === null, '00:00~00:00 视为全天营业 → 无警告');
+// 普通营业时间 09:00~18:00：夜间行程仍应正常警告（对照，确保未过度放宽）
+assert(itin.outsideHours('22:00', 2, [{ open: '09:00', close: '18:00' }]) !== null, '普通 09~18 营业·夜间行程 → 正常提示非营业');
+// alwaysOpen 标记（经 effectiveHours 取值）同样覆盖跨午夜
+const aoSpot = { name: '台北到悉尼', alwaysOpen: true, dailyHours: {} };
+assert(itin.outsideHours('22:00', 10, itin.effectiveHours(aoSpot, 6)) === null, 'alwaysOpen 标记·跨午夜行程 → 无警告');
+
 console.log(`\n==== 结果：${passed} 通过 / ${failed} 失败 ====`);
 process.exit(failed ? 1 : 0);

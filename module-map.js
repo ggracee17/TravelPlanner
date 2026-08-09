@@ -231,15 +231,19 @@ app.modules.map = {
      'located'/'failed-new' 表示本次有写库，调用方据此决定是否 saveState。 */
   async _resolveItemCoord(it) {
     const s = it.spot;
-    if (s.lat != null && s.lng != null) return 'existing';            // 已有坐标，跳过
-    // 有地图链接：优先从中解析坐标（免费、位置最准，且不按名称定位，避免同名地点被定位到错误位置）
+    // 优先用行程里的地图链接坐标：只要有链接且能解析出坐标，就【强制】以此为基准（覆盖可能存在的旧坐标 /
+    // 错误地理编码结果，例如「台北到悉尼」被错定到悉尼）。仅当链接无法解析出坐标时，才退回「已有坐标 → 名称地理编码」的兜底。
+    // —— 对应诉求：所有地图上的点都按行程里的链接定位。
     const fromUrl = s.mapUrl ? extractCoordsFromMapUrl(s.mapUrl) : null;
     if (fromUrl) {
+      const changed = !(s.lat === fromUrl.lat && s.lng === fromUrl.lng); // 与现坐标一致则无需回写
       s.lat = fromUrl.lat; s.lng = fromUrl.lng;
       if (it.isCand) { const c = (app.state.candidates || []).find(x => x.id === it.spot.id); if (c) { c.lat = fromUrl.lat; c.lng = fromUrl.lng; } }
       s._geoFailed = false; s._geoFailQ = '';
-      return 'located';
+      return changed ? 'located' : 'existing';
     }
+    // 无链接或链接无坐标：已有坐标则跳过，否则按名称/地址地理编码
+    if (s.lat != null && s.lng != null) return 'existing';
     // 无链接 / 链接无坐标：按名称/地址地理编码（省 Credits 模式跳过，只显示已有/链接坐标的点）
     if (app.state.ecoMode) { if (!s._geoFailed) s._geoFailed = true; return 'failed-new'; }
     const q = [s.name, s.address].filter(Boolean).join(' ').trim();

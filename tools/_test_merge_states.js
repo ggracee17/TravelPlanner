@@ -124,6 +124,16 @@ console.log('\n[单元测试] mergeStatesPreferLocal 的合并语义');
   remote5.destinations[0].itinerary.find(d => d.id === 'day3').spots.push({ id: 'b', name: '对方新增' });
   const out5 = A.mergeStatesPreferLocal(remote5, local5);
   assert(hasSpot(out5, 'day3', 'b'), '并发窗口内：对方新增块被重新并入（本地删除被覆盖是预期冲突策略）');
+
+  // 回归：远端目的地若缺 itinerary 数组（脏数据），合并不得抛错（曾崩溃于 app.js:569 的 rd.itinerary.forEach）
+  const local6 = clone(BASE_STATE);
+  const remote6 = clone(BASE_STATE);
+  remote6.destinations[0].itinerary = undefined; // 模拟缺字段的脏数据
+  let threw = false;
+  let out6 = null;
+  try { out6 = A.mergeStatesPreferLocal(remote6, local6); } catch (e) { threw = true; }
+  assert(!threw, '远端目的地缺 itinerary 数组时不抛错');
+  assert(out6 && hasSpot(out6, 'day1', 'sp1'), '缺字段的远端态合并后本地数据完整（sp1 仍在）');
 }
 
 console.log('\n[集成测试] 2 人同时编辑：B 保存后 A 在 Day3 新增的块不应消失（修复后）');

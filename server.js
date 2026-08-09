@@ -367,7 +367,9 @@ const server = http.createServer(async (req, res) => {
       let set = sseClients.get(username);
       if (!set) { set = new Set(); sseClients.set(username, set); }
       set.add(res);
-      res.write(`event: presence\ndata: ${JSON.stringify({ type: 'presence', count: set.size })}\n\n`);
+      // 向【所有】同账号客户端广播最新在线人数：新连接加入后，已在线的客户端也要即时更新
+      // （只给新连接写一条 presence 的话，先连上的那一方会一直停留在旧人数，典型症状：明明 2 人在线却显示「在线 1 人」）。
+      broadcast('presence', username, { type: 'presence', count: set.size });
       const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) {} }, 25000);
       req.on('close', () => {
         clearInterval(ping);

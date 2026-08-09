@@ -120,6 +120,23 @@ console.log('\n[测试] 无链接 / 链接无坐标 → 按名称兜底（或省
   assert(st === 'existing', '已有坐标 → existing，不重复定位');
 }
 
+console.log('\n[测试] 地图链接坐标覆盖已有/旧坐标（修复「台北到悉尼」被错定到悉尼）');
+{
+  // 已有坐标指向旧位置（悉尼 151, -33），但行程链接坐标在香港/台北 → 链接应覆盖
+  geoLog = [];
+  const it = { spot: { name: '台北到悉尼', mapUrl: 'https://www.google.com/maps/@25.033,121.565,15z', lat: -33.8688, lng: 151.2093 }, isCand: false };
+  const st = await map._resolveItemCoord(it);
+  assert(st === 'located', '已有坐标但链接坐标不同 → located（链接覆盖）');
+  assert(Math.abs(it.spot.lat - 25.033) < 1e-6 && Math.abs(it.spot.lng - 121.565) < 1e-6, '坐标被行程链接坐标覆盖（不再停在旧位置）');
+  assert(geoLog.length === 0, '有链接坐标时不调用名称地理编码');
+}
+{
+  // 链接坐标与现有坐标一致 → 视为 existing（无需回写）
+  const it = { spot: { name: 'X', mapUrl: 'https://www.google.com/maps/@25.033,121.565,15z', lat: 25.033, lng: 121.565 }, isCand: false };
+  const st = await map._resolveItemCoord(it);
+  assert(st === 'existing', '链接坐标与现有坐标一致 → existing');
+}
+
 console.log(`\n==== 结果：${passed} 通过 / ${failed} 失败 ====`);
 process.exit(failed ? 1 : 0);
 })();

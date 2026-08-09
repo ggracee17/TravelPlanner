@@ -386,8 +386,25 @@ const app = {
     return !!(r && r.innerHTML && r.innerHTML.trim());
   },
 
+  // 主动从服务端拉取最新看板（多人协作时，一键同步协作者刚保存的内容；也用于「刷新最新数据」按钮）。
+  // 仅在后端模式 + 已登录 + 本地有缓存快照时才可用（无缓存即本地即权威，无需刷新）。
+  refreshFromServer() {
+    if (!this.backend.enabled || !this.sessionToken) return;
+    try { if (!localStorage.getItem(CACHE_KEY)) return; } catch (e) {}
+    this.updateStatus('正在拉取最新数据…');
+    this.fetchBoard().then(() => {
+      this.renderSwitcher();
+      this.renderAll();
+      this._writeLocalCache();
+      this.updateStatus();
+      this.toast('已拉取最新数据', 'success');
+    }).catch(() => this.updateStatus(this.t('status.saveFail')));
+  },
+
   updateStatus(extra) {
     const el = document.getElementById('boardStatus');
+    const rb = document.getElementById('refreshBoardBtn');
+    if (rb) { try { rb.classList.toggle('hidden', !(this.backend && this.backend.enabled) || !localStorage.getItem(CACHE_KEY)); } catch (e) { rb.classList.add('hidden'); } }
     if (!el) return;
     if (!this.backend.enabled) { el.classList.add('hidden'); el.textContent = ''; this._renderAccountBar(); return; }
     el.classList.remove('hidden');
@@ -495,10 +512,16 @@ const app = {
     if (!this.sessionToken) return Promise.resolve();
     // 并发编辑保护：若「本地有待推送改动期间」暂存了协作者的远端更新，推送前先把它并入本地，
     // 避免把对方刚新增的行程块覆盖掉（典型症状：2 人同时编辑，一方保存后，另一方因推送旧态导致对方新增的块消失）。
+    // 合并若因远端数据结构异常而抛错，绝不能因此丢掉本地已编辑好的内容：丢弃暂存态、保住本地、照常推送。
     if (this._pendingRemote) {
-      this.state = this.mergeStatesPreferLocal(this._pendingRemote, this.state);
+      try {
+        this.state = this.mergeStatesPreferLocal(this._pendingRemote, this.state);
+        this._lastSig = JSON.stringify(this.state);
+      } catch (e) {
+        console.error('[合并远端态失败] 已丢弃暂存态、保留本地改动：', e);
+        this.toast('合并协作者的更新失败，已保留你本地的修改', 'warning');
+      }
       this._pendingRemote = null;
-      this._lastSig = JSON.stringify(this.state);
     }
     const payload = JSON.stringify(this.state);
     this._writeLocalCache(); // 安全网：推送前先镜像一份到本地
@@ -563,10 +586,10 @@ const app = {
     // 目的地：补回 remote 独有的目的地，并按目的地并集其每日行程与行程块
     const rDests = new Map((remote.destinations || []).map(d => [d.id, d]));
     (out.destinations || []).forEach(d => {
-      const rd = rDests.get(d.id); if (!rd) return;
+      const rd = rDests.get(d.id); if (!rd || typeof rd !== 'object') return;
       if (!Array.isArray(d.itinerary)) d.itinerary = [];
       const rDays = new Map((rd.itinerary || []).map(day => [day.id, day]));
-      rd.itinerary.forEach(rDay => {
+      (rd.itinerary || []).forEach(rDay => {
         let lDay = d.itinerary.find(x => x.id === rDay.id);
         if (!lDay) { lDay = JSON.parse(JSON.stringify(rDay)); d.itinerary.push(lDay); return; }
         addMissing(rDay.spots || [], lDay.spots || (lDay.spots = []), 'id');

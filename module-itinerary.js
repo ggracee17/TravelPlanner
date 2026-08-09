@@ -351,6 +351,8 @@ app.modules.itinerary = {
       const o = itinTimeToNum(g.open), cRaw = itinTimeToNum(g.close);
       // 00:00 表示营业到午夜，需视为 24:00（cRaw<=o 说明跨越午夜，整段 +24）
       const c = cRaw <= o + 1e-6 ? cRaw + 24 : cRaw;
+      // 覆盖完整 24 小时（如 00:00–24:00，或 00:00–00:00）：视为「全天营业」，任何时段（含跨午夜的夜间行程）都在营业内
+      if (o <= 1e-6 && c >= 24 - 1e-6) return true;
       return st >= o - 1e-6 && en <= c + 1e-6;
     });
     if (inAny) return null;
