@@ -519,7 +519,7 @@ table.data-table tr:hover td { background: #f8fafc; }
 .blk-hotel      .tl-block-cat-v { color:#a855f7; background: rgba(168,85,247,.14); }
 .blk-spot       .tl-block-cat-v { color:#3b82f6; background: rgba(59,130,246,.14); }
 .blk-transport  .tl-block-cat-v { color:#0891b2; background: rgba(8,145,178,.14); }
-.blk-shopping   .tl-block-cat-v { color:#ea580c; background: rgba(234,88,12,.14); }
+.blk-shopping   .tl-block-cat-v { color:#a16207; background: rgba(202,138,4,.16); }
 .blk-entertainment .tl-block-cat-v { color:#6366f1; background: rgba(99,102,241,.14); }
 .blk-photo      .tl-block-cat-v { color:#0d9488; background: rgba(13,148,136,.14); }
 .blk-dessert    .tl-block-cat-v { color:#d946ef; background: rgba(217,70,239,.14); }
@@ -544,7 +544,7 @@ table.data-table tr:hover td { background: #f8fafc; }
 .blk-hotel      { background: #faf5ff; border-left-color: #a855f7; }
 .blk-spot       { background: #eff6ff; border-left-color: #3b82f6; }
 .blk-transport  { background: #ecfeff; border-left-color: #06b6d4; }
-.blk-shopping   { background: #fff7ed; border-left-color: #f97316; }
+.blk-shopping   { background: #fefce8; border-left-color: #eab308; }
 .blk-entertainment { background: #eef2ff; border-left-color: #6366f1; }
 .blk-photo      { background: #f0fdfa; border-left-color: #0d9488; }
 .blk-dessert    { background: #fdf4ff; border-left-color: #d946ef; }

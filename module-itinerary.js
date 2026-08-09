@@ -2,7 +2,7 @@
    板块2：每日行程表（时间轴 · 可拖拽版本）
    每天 = 一条 00:00–24:00 时间轴，可上下滚动；默认滚动到 6:00，向上滚动可见 6:00 之前（含凌晨行程）。
    行程以"块"形式落在时间上。各天<strong>横向排列</strong>，可左右滚动。
-   每个块按分类着色：餐饮(红) / 酒店(紫) / 景点(蓝) / 交通(青) / 购物(橙) / 娱乐(靛) / 拍照(青绿) / 甜品(品红) / 小吃(橙) / 活动(绿) / 其他(灰)。
+   每个块按分类着色：餐饮(红) / 酒店(紫) / 景点(蓝) / 交通(青) / 购物(黄) / 娱乐(靛) / 拍照(青绿) / 甜品(品红) / 小吃(橙) / 活动(绿) / 其他(灰)。
    块上显示 名称 + 时间段；拖动块可改时间或跨日移动（对齐线落在块的<strong>开始</strong>时间）；
    点块编辑详情（门票 / 是否需预约 / 建议时长 / 地址 / 营业时间 / 地图 / 图片 / 备注）。
    行程块与「板块5·行程库」共用同一编辑表单，双方改动<strong>双向同步</strong>。
@@ -147,8 +147,8 @@ app.modules.itinerary = {
         <p class="text-sm text-slate-600 mb-4">
           当前目的地：<strong class="text-sky-700">${app.destName(d)}</strong>　·　共 <strong>${app.dateDiff(d.startDate, d.endDate)}</strong> 天　·　已规划 <strong>${days.length}</strong> 天。
           下方为<strong>横向时间轴</strong>：每天一条时间轴，各天并排可左右滚动；每个行程块按分类着色
-          （餐饮红 / 酒店紫 / 景点蓝 / 交通青 / 购物橙 / 娱乐靛 / 拍照青绿 / 甜品品红 / 小吃橙 / 活动绿 / 其他灰），<strong>拖动块</strong>即可改时间或换到别的日期
-          （对齐线落在块的<strong>开始时间</strong>处）。时间轴为完整 00:00–24:00，默认滚动到 6:00；向上滚动可见 6:00 之前的凌晨行程，凌晨行程块同样可以拖动。
+          （餐饮红 / 酒店紫 / 景点蓝 / 交通青 / 购物黄 / 娱乐靛 / 拍照青绿 / 甜品品红 / 小吃橙 / 活动绿 / 其他灰），<strong>拖动块</strong>即可改时间或换到别的日期
+          （对齐线落在块的<strong>开始时间</strong>处）。时间轴为完整 00:00–24:00，默认从 00:00（清晨）起显示；向下滚动可见更晚时段（含 6:00 之前的凌晨行程块，同样可以拖动）。
         </p>
 
         ${days.length === 0 ? `
@@ -163,8 +163,9 @@ app.modules.itinerary = {
           </div>
         `}
       </div>`;
-    // 默认把每条时间轴滚动到 6:00 处（向上可看 6:00 之前的凌晨行程）
-    try { sec.querySelectorAll('.timeline').forEach(tl => { tl.scrollTop = ITIN_TL_VIEW_START * itinHourPx(); }); } catch (_) {}
+        // 默认把每条时间轴滚动到顶部（00:00 起），让一天的行程从清晨开始显示；
+    // 向下滚动可见更晚时段。避免默认停在底部（6:00–24:00）让用户误以为「被拖到底/看不到开头」。
+    try { sec.querySelectorAll('.timeline').forEach(tl => { tl.scrollTop = 0; }); } catch (_) {}
   },
 
   toggleZoom() {
@@ -364,6 +365,9 @@ app.modules.itinerary = {
   _drag: null,
 
   onDragStart(e) {
+    // 防御：清理上一次可能被中断残留的拖拽指示（幽灵块 / 对齐线 / 残留 _drag），避免旧状态干扰本次拖动
+    document.querySelectorAll('.tl-drop-ghost').forEach(g => g.remove());
+    document.querySelectorAll('.tl-drop-line').forEach(l => { if (l) l.style.display = 'none'; });
     const el = (e.target && e.target.closest && e.target.closest('[data-spot-id]'))
       || (e.currentTarget && e.currentTarget.closest && e.currentTarget.closest('[data-spot-id]'))
       || e.currentTarget;
@@ -460,8 +464,16 @@ app.modules.itinerary = {
     const y = e.clientY - rect.top;
     let hour = itinSnap(ws + (y + (tl.scrollTop || 0)) / hpx);
     hour = Math.max(ws, Math.min(we - 0.5, hour));
-    this.moveSpotToTime(from.spotId, tl.dataset.dayId, itinNumToTime(hour));
-    this._drag = null;
+    // 落点处理包在 try/finally 里：即便移动行程出错，也一定清空 _drag，避免「卡死」导致后续所有块都拖不动。
+    try {
+      this.moveSpotToTime(from.spotId, tl.dataset.dayId, itinNumToTime(hour));
+    } catch (err) {
+      console.error('[拖拽落点处理失败]', err);
+      try { app.renderAll(); } catch (_) {}
+      app.toast('移动行程失败，已撤销本次拖动', 'warning');
+    } finally {
+      this._drag = null;
+    }
   },
 
   onDragEnd(e) {
@@ -469,10 +481,15 @@ app.modules.itinerary = {
       || (e.currentTarget && e.currentTarget.closest && e.currentTarget.closest('[data-spot-id]'))
       || e.currentTarget;
     if (el) el.classList.remove('dragging');
-    if (this._drag) { app.renderAll(); } // 拖拽被取消（未成功 drop），恢复折叠视图
+    // 无论如何先清空拖拽状态，杜绝「_drag 残留 → 后续所有行程块都拖不动」的卡死。
+    const wasDragging = !!this._drag;
     this._drag = null;
     document.querySelectorAll('.tl-drop-line').forEach(l => l.style.display = 'none');
     document.querySelectorAll('.tl-drop-ghost').forEach(g => g.remove());
+    // 拖拽被取消（未成功 drop）时，恢复折叠视图（expanded 状态在 onDragStart 里改过）。
+    if (wasDragging) {
+      try { app.renderAll(); } catch (err) { console.error('[拖拽结束后恢复视图失败]', err); }
+    }
   },
 
   moveSpotToTime(spotId, toDayId, newStart) {
@@ -708,7 +725,9 @@ app.modules.itinerary = {
     const minS = 0;
     const maxS = ITIN_TL_END - (parseFloat(durH) || 1);
     if (start < minS) start = minS;
-    if (start > maxS) start = minS; // 溢出则回到凌晨
+    // 当天已排满（最后一块结束过晚，再往后放会超出 24:00）时，回退到上午 9:00，
+    // 而不是回退到 00:00（否则新行程会落到午夜，且在折叠视图下被过滤隐藏，看起来像「无法拖动」）。
+    if (start > maxS) start = 9;
     return itinNumToTime(start);
   },
 
