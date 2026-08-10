@@ -55,7 +55,8 @@ assert(itin.defaultStart({ spots: [{ startTime: '23:00', durationH: 2 }] }, 2) =
 
 console.log('\n[2) 时间轴默认停在 6:00–00:00（最大滚动值，常用行程区间）]');
 const itinSrc = fs.readFileSync(path.join(ROOT, 'module-itinerary.js'), 'utf8');
-assert(/querySelectorAll\('\.timeline'\)\.forEach\(tl => \{\s*const target = parseFloat\(tl\.getAttribute\('data-default-scroll'\)\)[\s\S]*tl\.scrollTop =/.test(itinSrc), 'render 把 timeline 默认滚到 6:00–00:00 常用区间（用显式 data-default-scroll 偏移，不依赖 scrollHeight 求值）');
+assert(/getAttribute\('data-default-scroll'\)[\s\S]*tl\.scrollTop = Math\.min\(target, max\)/.test(itinSrc), 'render 把 timeline 滚到 data-default-scroll 指定的 6:00–00:00 位置（用显式偏移，不依赖 scrollHeight 求值）');
+assert(/requestAnimationFrame\(settleTick\)/.test(itinSrc), '用 rAF 循环在时间轴可滚动后持续滚到默认位置（覆盖首帧布局未就绪）');
 assert(!/tl\.scrollTop = 0;/.test(itinSrc.replace(/\s+/g, ' ')), '不再默认停在顶部（00:00）');
 
 console.log('\n[3) 拖拽硬化：drop 失败也清空 _drag]');
@@ -97,10 +98,11 @@ assert(/id="t_end" value="15:30"/.test(schedHtml3), '新行程(13:30/2h) 结束�
 const schedHtml4 = itin._schedFields({ startTime: '09:00', durationH: 2, endTime: '20:00' });
 assert(/id="t_end" value="20:00"/.test(schedHtml4), '已填 endTime 时尊重原值（不覆盖为 11:00）');
 
-console.log('\n[6) 时间轴默认滚动在布局完成后应用（双重 rAF），刷新即停在 6:00–00:00]');
+console.log('\n[6) 时间轴默认滚动在布局就绪后持续应用（settle 循环），刷新即停在 6:00–00:00]');
 const itinSrc2 = fs.readFileSync(path.join(ROOT, 'module-itinerary.js'), 'utf8');
-assert(/const applyDefaultScroll = \(\) =>/.test(itinSrc2), 'render 抽出 applyDefaultScroll 函数包裹滚动逻辑');
-assert(/requestAnimationFrame\(\(\) => requestAnimationFrame\(applyDefaultScroll\)\)/.test(itinSrc2), 'render 用双重 requestAnimationFrame 等布局就绪后再设 scrollTop（修复刷新后停在 0:00）');
+assert(/const applyDefaultScroll = \(tl\) =>/.test(itinSrc2), 'render 抽出 applyDefaultScroll(tl) 负责把单条时间轴滚到 data-default-scroll 位置');
+assert(/const settleTick = \(\) =>/.test(itinSrc2), 'render 抽出 settleTick 在可滚动前持续重试（避免首帧布局未就绪被钳回 0）');
+assert(/requestAnimationFrame\(settleTick\)/.test(itinSrc2), 'settleTick 用 rAF 循环直到所有时间轴滚到位');
 
 console.log('\n[7) 当日备注显示在天气之前]');
 const dayHtml = itin.renderDayColumn({ id: 'dayX', date: '2026-01-01', weather: '晴 22-30℃', notes: '记得带伞', spots: [] }, 0, { name: '台北', id: 'destX' }, false);

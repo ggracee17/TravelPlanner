@@ -163,25 +163,32 @@ app.modules.itinerary = {
           </div>
         `}
       </div>`;
-        // 默认把每条时间轴滚动到「6:00–00:00」区段（即最大滚动值）：因为大部分行程在 6:00 之后，
+        // 默认把每条时间轴滚动到「6:00–00:00」区段（即最大滚动值）：大部分行程在 6:00 之后，
     // 这样默认就停在常用区间，免去每次手动拖到最底；向上滚动仍可看到 6:00 之前的凌晨行程。
-    // 使用显式默认滚动偏移（data-default-scroll = 6h）。关键：必须等 innerHTML 写入后、浏览器
-    // 完成首帧布局再设置 scrollTop——否则紧跟 innerHTML 的同步赋值在布局未就绪时会被浏览器重置为 0
-    // （表现为刷新后停在 0:00，直到拖拽等再次 render 才修正）。用双重 rAF 等布局就绪再应用。
-    const applyDefaultScroll = () => {
-      try {
-        sec.querySelectorAll('.timeline').forEach(tl => {
-          const target = parseFloat(tl.getAttribute('data-default-scroll')) || 0;
-          const max = tl.scrollHeight - tl.clientHeight;
-          tl.scrollTop = max > 0 ? Math.min(target, max) : target;
-        });
-      } catch (_) {}
+    // 关键：初次 render 发生在页面加载早期，CSS/字体/图片/实时同步二次渲染可能尚未让 .timeline
+    // 完成布局，此刻 scrollHeight-clientHeight=0，设置 scrollTop 会被浏览器钳回 0（表现为刷新后
+    // 停在 0:00，直到拖拽等再次 render 才修正）。因此这里不依赖单次赋值，而是在接下来一小段时间内
+    // 持续把时间轴滚到默认位置，直到它真正可滚动并已到位为止。
+    const applyDefaultScroll = (tl) => {
+      const target = parseFloat(tl.getAttribute('data-default-scroll')) || 0;
+      const max = tl.scrollHeight - tl.clientHeight;
+      if (max > 0) { tl.scrollTop = Math.min(target, max); return true; }
+      return false;
     };
-    if (typeof requestAnimationFrame === 'function') {
-      requestAnimationFrame(() => requestAnimationFrame(applyDefaultScroll));
-    } else {
-      applyDefaultScroll();
-    }
+    const settleStart = Date.now();
+    const settleTick = () => {
+      let done = true;
+      try {
+        sec.querySelectorAll('.timeline').forEach(tl => { if (!applyDefaultScroll(tl)) done = false; });
+      } catch (_) {}
+      // 还有未到位的时间轴、且仍在时间窗内（覆盖布局/二次渲染延迟）→ 继续重试；一旦全部到位即停止
+      if (!done && Date.now() - settleStart < 1000) {
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(settleTick);
+        else setTimeout(settleTick, 16);
+      }
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(settleTick);
+    else settleTick();
   },
 
   toggleZoom() {
