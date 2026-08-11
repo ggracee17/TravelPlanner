@@ -201,6 +201,31 @@ app.modules.itinerary = {
     };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(settleTick);
     else settleTick();
+    // 额外保险：整页（含字体/图片）完全加载、或 Web Font 就绪后，再尝试把时间轴滚到默认位置一次，
+    // 覆盖「布局在 1s settle 窗口之后才稳定」的极端情况（此时可能不会再触发新的 render）。
+    // 只挂载一次，避免每次 render 都重复绑定事件。
+    if (!this._loadScrollArmed && typeof window !== 'undefined') {
+      this._loadScrollArmed = true;
+      const arm = () => this.applyDefaultScrollAll();
+      if (typeof document !== 'undefined' && document.readyState === 'complete') arm();
+      else if (window.addEventListener) window.addEventListener('load', arm);
+      if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(arm).catch(() => {});
+      }
+    }
+  },
+
+  /* 把页面上【所有】时间轴滚到默认「6:00–00:00」位置（整页加载完成 / 字体就绪后的二次保险）。
+     供 window.load、document.fonts.ready 调用；不依赖单次赋值的时机，直接读 data-default-scroll。 */
+  applyDefaultScrollAll() {
+    try {
+      const tls = (typeof document !== 'undefined') ? document.querySelectorAll('.timeline') : [];
+      tls.forEach(tl => {
+        const target = parseFloat(tl.getAttribute('data-default-scroll')) || 0;
+        const max = tl.scrollHeight - tl.clientHeight;
+        if (max > 0) tl.scrollTop = Math.min(target, max);
+      });
+    } catch (_) {}
   },
 
   toggleZoom() {
@@ -328,9 +353,8 @@ app.modules.itinerary = {
            title="${title}">
         <div class="tl-block-cat-v">${[...meta.label].map(ch => `<span>${ch}</span>`).join('')}</div>
       <div class="tl-block-main">
-        ${!isXShort && s.travelFromPrev ? `<div class="tl-travel">${this.travelIcon(s.travelFromPrev.mode)} ${s.travelFromPrev.durText}${s.travelFromPrev.distText ? ' · ' + s.travelFromPrev.distText : ''}${s.travelFromPrev.unavailable ? '（无法计算）' : '　距上一站'}</div>` : ''}
         <div class="tl-block-title">${s.name || '未命名'}</div>
-        ${isXShort ? '' : `<div class="tl-block-time">${dispStart}–${dispEnd} · ${dur}h</div>`}
+        ${isXShort ? '' : `<div class="tl-block-time">${dispStart}–${dispEnd} · ${dur}h${s.travelFromPrev ? ` · ${this.travelIcon(s.travelFromPrev.mode)}${s.travelFromPrev.durText}${s.travelFromPrev.distText ? ' · ' + s.travelFromPrev.distText : ''}` : ''}</div>`}
         ${flags ? `<div class="tl-flags">${flags}</div>` : ''}
       </div>
       </div>`;

@@ -96,5 +96,34 @@ itin.exportXlsx();
 assert(/^itinerary_台北_.*\.csv$/.test(fallback.fn || ''), '无 XLSX 时降级为 itinerary_台北_*.csv');
 assert(Array.isArray(fallback.rows) && fallback.rows.some(r => r.名称 === '台北101'), '降级 CSV 含行程块行');
 
+console.log('\n[5) 紧凑视图：1h 行程块文字不再被交通时间盖住（交通内联进时间行）]');
+app.state.itineraryZoom = 'compact';
+const win = { start: 6, end: 24 };
+const shortSpot = {
+  id: 'spS', name: '短行程', type: 'spot',
+  startTime: '09:00', durationH: 1, endTime: '10:00',
+  travelFromPrev: { mode: 'walking', durText: '12分钟', distText: '800m' }
+};
+const compactHtml = itin.renderBlock(shortSpot, { id: 'd1', date: '2026-01-01' }, win, { lane: 0, lanes: 1 });
+assert(!/class="tl-travel"/.test(compactHtml), '紧凑 1h 块不再渲染独立的 .tl-travel 行（避免盖住标题）');
+const ti = compactHtml.indexOf('tl-block-time');
+const td = compactHtml.indexOf('12分钟');
+assert(ti >= 0 && td >= 0 && td > ti, '交通时间「12分钟」内联在 .tl-block-time 之内（同一行，不再单独成行盖住标题）');
+
+console.log('\n[6) 刷新后默认停 6:00–00:00：整页加载/字体就绪后的二次保险 applyDefaultScrollAll]');
+assert(typeof itin.applyDefaultScrollAll === 'function', '存在 applyDefaultScrollAll 方法');
+const fakeTls = [
+  { _top: -1, getAttribute: (k) => (k === 'data-default-scroll' ? '288' : null), scrollHeight: 1152, clientHeight: 864,
+    set scrollTop(v) { this._top = v; }, get scrollTop() { return this._top; } },
+  { _top: -1, getAttribute: (k) => (k === 'data-default-scroll' ? '288' : null), scrollHeight: 0, clientHeight: 864,
+    set scrollTop(v) { this._top = v; }, get scrollTop() { return this._top; } }
+];
+const origQSA = ctx.document.querySelectorAll;
+ctx.document.querySelectorAll = (sel) => (sel === '.timeline' ? fakeTls : []);
+itin.applyDefaultScrollAll();
+ctx.document.querySelectorAll = origQSA;
+assert(fakeTls[0].scrollTop === 288, '可滚动时间轴被滚到默认 288px（6:00–00:00）');
+assert(fakeTls[1].scrollTop === -1, '布局未就绪（不可滚动）的时间轴不被改动，避免被钳回 0');
+
 console.log('\n===== 结果: ' + (failed === 0 ? '全部通过 (' + passed + ')' : failed + ' 项失败') + ' =====');
 process.exit(failed === 0 ? 0 : 1);

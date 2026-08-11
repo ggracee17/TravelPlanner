@@ -267,7 +267,28 @@ function serveStatic(req, res, pathname) {
   fs.stat(filePath, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404); res.end('Not Found'); return; }
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    const ctype = MIME[ext] || 'application/octet-stream';
+    // 部署后强制浏览器重新校验静态资源：避免「git push 完刷新，仍然跑磁盘里缓存的旧 JS/CSS」
+    // 这一最常见的「改了没生效」坑。下发 no-cache + Last-Modified，浏览器每次刷新都带
+    // If-Modified-Since 重新校验：文件未变返回 304（省带宽），文件已变返回 200 拉新文件。
+    const lastMod = st.mtimeMs;
+    const ims = req.headers['if-modified-since'];
+    if (ims) {
+      const imsMs = Date.parse(ims);
+      if (!isNaN(imsMs) && Math.floor(imsMs / 1000) >= Math.floor(lastMod / 1000)) {
+        res.writeHead(304, {
+          'Cache-Control': 'no-cache',
+          'Last-Modified': new Date(lastMod).toUTCString()
+        });
+        res.end();
+        return;
+      }
+    }
+    res.writeHead(200, {
+      'Content-Type': ctype,
+      'Cache-Control': 'no-cache',
+      'Last-Modified': new Date(lastMod).toUTCString()
+    });
     fs.createReadStream(filePath).pipe(res);
   });
 }

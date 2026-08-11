@@ -530,7 +530,7 @@ table.data-table tr:hover td { background: #f8fafc; }
 .tl-short { padding: 3px 7px 3px 4px; }
 .tl-short .tl-flag { display: none; }
 .tl-short .tl-block-title { font-size: 0.74rem; line-height: 1.1; }
-.tl-short .tl-block-time { font-size: 0.62rem; }
+.tl-short .tl-block-time { font-size: 0.62rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tl-xshort .tl-block-time { display: none; }
 .tl-flag {
   display: inline-block; font-size: 0.6rem; background: #fef3c7; color: #92400e;
