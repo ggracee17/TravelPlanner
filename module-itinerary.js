@@ -123,6 +123,11 @@ app.modules.itinerary = {
     const expanded = !!app.state.itineraryExpand;
     const travMode = app.state.itineraryTravelMode || 'transit';
 
+    // 拖动行程块后会触发整段重渲（innerHTML 重建），横向滚动位置会被浏览器重置到最左。
+    // 先记录当前 .itinerary-rows 的 scrollLeft，渲染后再恢复，避免视图每次都跳回最左边。
+    const prevRowsScrollLeft = (sec.querySelector && sec.querySelector('.itinerary-rows'))
+      ? sec.querySelector('.itinerary-rows').scrollLeft : 0;
+
     sec.innerHTML = `
       <div class="card">
         <div class="card-title">
@@ -141,6 +146,7 @@ app.modules.itinerary = {
             <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleZoom()">${app.state.itineraryZoom === 'compact' ? '🔍 ' + app.t('itinerary.zoomLoose') : '🔍 ' + app.t('itinerary.zoomCompact')}</button>
             <button class="btn btn-ghost" onclick="app.modules.itinerary.toggleExpand()">${expanded ? '🔼 ' + app.t('itinerary.collapse') : '🔽 ' + app.t('itinerary.expand')}</button>
             <button class="btn btn-warning" onclick="app.modules.itinerary.autoGenDays()">${app.t('itinerary.autoGen')}</button>
+            <button class="btn btn-success" onclick="app.modules.itinerary.exportXlsx()" title="把当前目的地的每日行程导出为 Excel（含每天每个行程块的起止时间、分类、门票、地址、地图链接等）">📥 导出行程</button>
             <button class="btn btn-primary" onclick="app.modules.itinerary.addDay()">${app.t('itinerary.addDay')}</button>
           </div>
         </div>
@@ -163,7 +169,10 @@ app.modules.itinerary = {
           </div>
         `}
       </div>`;
-        // 默认把每条时间轴滚动到「6:00–00:00」区段（即最大滚动值）：大部分行程在 6:00 之后，
+    // 恢复横向滚动位置（避免拖动行程块重渲后跳回最左；日卡片固定宽度，innerHTML 后即可设）
+    const rowsEl = sec.querySelector('.itinerary-rows');
+    if (rowsEl) rowsEl.scrollLeft = prevRowsScrollLeft;
+    // 默认把每条时间轴滚动到「6:00–00:00」区段（即最大滚动值）：大部分行程在 6:00 之后，
     // 这样默认就停在常用区间，免去每次手动拖到最底；向上滚动仍可看到 6:00 之前的凌晨行程。
     // 关键：初次 render 发生在页面加载早期，CSS/字体/图片/实时同步二次渲染可能尚未让 .timeline
     // 完成布局，此刻 scrollHeight-clientHeight=0，设置 scrollTop 会被浏览器钳回 0（表现为刷新后
@@ -178,6 +187,9 @@ app.modules.itinerary = {
     const settleStart = Date.now();
     const settleTick = () => {
       let done = true;
+      // 每次重试也顺便恢复横向滚动位置（覆盖实时同步等二次重渲把 .itinerary-rows 重建、scrollLeft 重置的情况）
+      const re = sec.querySelector('.itinerary-rows');
+      if (re) re.scrollLeft = prevRowsScrollLeft;
       try {
         sec.querySelectorAll('.timeline').forEach(tl => { if (!applyDefaultScroll(tl)) done = false; });
       } catch (_) {}
@@ -1556,6 +1568,48 @@ app.modules.itinerary = {
     app.closeModal();
     app.renderAll();
     app.toast(`已复制「${spot.name}」到 ${count} 天（共享同一行程库项目）`, 'success');
+  },
+
+  /* ===== 把当前目的地的每日行程导出为 Excel ===== */
+  exportXlsx() {
+    const d = app.getActiveDestination();
+    if (!d) { app.toast('请先选择目的地', 'warning'); return; }
+    const days = (app.state[d.id]?.itinerary || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    if (!days.length) { app.toast('该目的地还没有每日行程', 'warning'); return; }
+    const rows = [];
+    days.forEach((day, i) => {
+      const spots = (day.spots || []).slice().sort((a, b) => itinTimeToNum(a.startTime) - itinTimeToNum(b.startTime));
+      const base = { Day: i + 1, 日期: day.date || '', 星期: day.date ? itinWeekdayLabel(day.date) : '', 天气: day.weather || '', 当日备注: day.notes || '' };
+      if (!spots.length) {
+        rows.push(Object.assign({}, base, { 开始时间: '', 结束时间: '', 时长h: '', 名称: '(无行程)', 分类: '', 门票: '', 需预约: '', 地址: '', 备注: '', 地图链接: '' }));
+        return;
+      }
+      spots.forEach(s => {
+        const meta = ITIN_TYPES[s.type] || ITIN_TYPES.other;
+        const end = s.endTime || itinEndTime(s.startTime, s.durationH);
+        const resv = s.reservation ? ({ needed: '需预约', booked: '已预约', none: '无需预约' }[s.reservation] || '未知') : '';
+        rows.push(Object.assign({}, base, {
+          开始时间: s.startTime || '',
+          结束时间: end,
+          时长h: parseFloat(s.durationH) || 0,
+          名称: s.name || '',
+          分类: meta.label || s.type || '',
+          门票: parseFloat(s.ticket) || 0,
+          需预约: resv,
+          地址: s.address || '',
+          备注: s.note || '',
+          地图链接: s.mapUrl || ''
+        }));
+      });
+    });
+    if (typeof XLSX === 'undefined') {
+      app.downloadCSV(`itinerary_${app.destName(d)}_${new Date().toISOString().slice(0, 10)}.csv`, rows);
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), (app.destName(d) + '-每日行程').slice(0, 31));
+    XLSX.writeFile(wb, `itinerary_${app.destName(d)}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    app.toast('已导出每日行程为 Excel', 'success');
   },
 
   /* ===== 修改 日期 / 天气 ===== */
