@@ -311,6 +311,11 @@ app.modules.expenses = {
             <option ${e.payment==='微信'?'selected':''}>微信</option>
             <option ${e.payment==='Apple Pay'?'selected':''}>Apple Pay</option>
             <option ${e.payment==='日元/美元/欧元'?'selected':''}>外币</option>
+            <option ${e.payment==='AMEX'?'selected':''}>AMEX</option>
+            <option ${e.payment==='UP'?'selected':''}>UP</option>
+            <option ${e.payment==='2UP'?'selected':''}>2UP</option>
+            <option ${e.payment==='CommBank'?'selected':''}>CommBank</option>
+            <option ${e.payment==='Wise'?'selected':''}>Wise</option>
             <option ${!e.payment?'selected':''}>其他</option>
           </select>
         </div>
