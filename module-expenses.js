@@ -175,7 +175,7 @@ app.modules.expenses = {
         <div class="budget-bar mb-4">
           <div class="budget-bar-fill ${pCls}" style="width:${Math.min(100, pct)}%"></div>
         </div>
-        ${pct >= 80 && pct < 100 ? '<div class="p-3 bg-amber-50 border border-amber-200 rounded mb-3 text-sm">⚠️ <strong>提醒：</strong>预算已使用 ${pct.toFixed(0)}%，请注意控制消费。</div>' : ''}
+        ${pct >= 80 && pct < 100 ? `<div class="p-3 bg-amber-50 border border-amber-200 rounded mb-3 text-sm">⚠️ <strong>提醒：</strong>预算已使用 ${pct.toFixed(0)}%，请注意控制消费。</div>` : ''}
         ${pct >= 100 ? `<div class="p-3 bg-red-50 border border-red-200 rounded mb-3 text-sm">🚨 <strong>超支警告：</strong>已超出预算 ¥${(-remaining).toFixed(0)}（≈ A${(-remaining / rate).toFixed(0)}），建议减少非必要消费。</div>` : ''}
 
         <!-- 分类汇总 -->
