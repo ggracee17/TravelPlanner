@@ -721,10 +721,11 @@ const app = {
     const d = this.state.destinations.find(x => x.id === destId);
     if (!d) return 0;
     const list = this.state[destId]?.expenses || [];
-    const rate = parseFloat(d.audToTwd) || 21;
+    const rateA = parseFloat(d.audToTwd) || 21;
+    const rateC = parseFloat(d.cnyToTwd) || 4.5;
     const travelers = Math.max(1, parseFloat(d.travelers) || 1);
     return list.reduce((s, e) => {
-      const unit = (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
+      const unit = (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rateA : e.currency === 'CNY' ? (parseFloat(e.amount) || 0) * rateC : (parseFloat(e.amount) || 0));
       let mult;
       if (e.single) mult = 1;
       else if (e.priceType === 'total') mult = 1;
@@ -741,10 +742,11 @@ const app = {
     if (!d) return 0;
     const items = this.state[destId]?.budgets || [];
     if (items.length > 0) {
-      const rate = parseFloat(d.audToTwd) || 21;
+      const rateA = parseFloat(d.audToTwd) || 21;
+      const rateC = parseFloat(d.cnyToTwd) || 4.5;
       const travelers = Math.max(1, parseFloat(d.travelers) || 1);
       return items.reduce((s, b) => {
-        const unit = (b.currency === 'AUD' ? (parseFloat(b.amount) || 0) * rate : (parseFloat(b.amount) || 0));
+        const unit = (b.currency === 'AUD' ? (parseFloat(b.amount) || 0) * rateA : b.currency === 'CNY' ? (parseFloat(b.amount) || 0) * rateC : (parseFloat(b.amount) || 0));
         let mult;
         if (b.priceType === 'total') mult = 1;
         else if (b.priceType === undefined) mult = (parseFloat(b.people) || 1);

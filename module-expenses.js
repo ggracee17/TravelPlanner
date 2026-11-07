@@ -2,9 +2,47 @@
    板块4：旅行花销记账台账
    字段：日期、分类、详情、金额、支付方式
    自动计算当日/总累计，临近预算上限主动超支提醒
+   货币：内部以「台币(TWD)」为基准，澳币(AUD)、人民币(CNY) 按汇率折算；
+        各目的地可在「显示币种」中勾选保留哪些货币（未勾选即从下拉中隐藏）。
    ============================================================ */
 
 app.modules.expenses = {
+  /* ====== 货币工具 ====== */
+  // 货币符号：台币 ¥ / 澳币 A$ / 人民币 CN¥（用 CN¥ 区分人民币与台币的 ¥）
+  symOf(cur) { return cur === 'AUD' ? 'A$' : cur === 'CNY' ? 'CN¥' : '¥'; },
+  // 货币中文标签
+  labelOf(cur) { return cur === 'AUD' ? '澳币 (A$)' : cur === 'CNY' ? '人民币 (CN¥)' : '台币 (NT$)'; },
+  // 货币简称（用于导出）
+  shortName(cur) { return cur === 'AUD' ? '澳币' : cur === 'CNY' ? '人民币' : '台币'; },
+  // 某目的地「显示币种」列表（用于下拉与双币展示），至少保留一个，缺省全开
+  visibleCurrencies(d) {
+    let list = (d && Array.isArray(d.enabledCurrencies)) ? d.enabledCurrencies.slice() : ['TWD', 'AUD', 'CNY'];
+    list = list.filter(c => ['TWD', 'AUD', 'CNY'].includes(c));
+    return list.length ? list : ['TWD'];
+  },
+  // 原币金额 → 台币（基准）
+  toTwd(amt, cur, d) {
+    const rA = parseFloat(d && d.audToTwd) || 21;   // 1 澳币 = ? 台币
+    const rC = parseFloat(d && d.cnyToTwd) || 4.5;  // 1 人民币 = ? 台币
+    return cur === 'AUD' ? amt * rA : cur === 'CNY' ? amt * rC : amt;
+  },
+  // 台币 → 原币
+  fromTwd(twd, cur, d) {
+    const rA = parseFloat(d && d.audToTwd) || 21;
+    const rC = parseFloat(d && d.cnyToTwd) || 4.5;
+    return cur === 'AUD' ? twd / rA : cur === 'CNY' ? twd / rC : twd;
+  },
+  // 把台币值格式化成「¥…（≈ A$… / CN¥…）」文本（尊重显示币种，仅展示非台币的勾选币种）
+  fmtTwd(twd, d) {
+    const rA = parseFloat(d && d.audToTwd) || 21;
+    const rC = parseFloat(d && d.cnyToTwd) || 4.5;
+    const fromTwd = (t, c) => c === 'AUD' ? t / rA : c === 'CNY' ? t / rC : t;
+    const others = this.visibleCurrencies(d).filter(c => c !== 'TWD');
+    let s = `¥${twd.toFixed(0)}`;
+    if (others.length) s += `（≈ ${others.map(c => `${this.symOf(c)}${fromTwd(twd, c).toFixed(0)}`).join(' / ')}）`;
+    return s;
+  },
+
   render() {
     const sec = document.querySelector('[data-section=expenses]');
     if (!sec) return;
@@ -24,12 +62,16 @@ app.modules.expenses = {
     }
 
     const expenses = (app.state[d.id]?.expenses || []).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    const rate = parseFloat(d.audToTwd) || 21;   // 1 澳币 = ? 台币
+    const rateA = parseFloat(d.audToTwd) || 21;   // 1 澳币 = ? 台币
+    const rateC = parseFloat(d.cnyToTwd) || 4.5;  // 1 人民币 = ? 台币
     const travelers = Math.max(1, parseFloat(d.travelers) || 1);          // 本次旅行人数
     const tripPeople = (Array.isArray(d.tripPeople) && d.tripPeople.length) ? d.tripPeople : ['我'];
+    const vis = this.visibleCurrencies(d);
     // 计价：single=仅一人（不按人数翻倍）；total=总价；per=单人价格×旅行人数；旧数据无 priceType 回落原 people
+    const toTwd = (amt, cur) => cur === 'AUD' ? amt * rateA : cur === 'CNY' ? amt * rateC : amt;
+    const fromTwd = (twd, cur) => cur === 'AUD' ? twd / rateA : cur === 'CNY' ? twd / rateC : twd;
     const twdOf = (e) => {
-      const unit = (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
+      const unit = toTwd(parseFloat(e.amount) || 0, e.currency);
       if (e.single) return unit; // 仅一人：不乘旅行人数
       if (e.priceType === 'total') return unit;
       const mult = (e.priceType === undefined) ? (parseFloat(e.people) || 1) : travelers;
@@ -40,7 +82,7 @@ app.modules.expenses = {
     // 逐项预算：每个 budget 项 { id, name, amount, currency, priceType }，汇总成台币
     const budgets = (app.state[d.id]?.budgets || []).slice();
     const bTwdOf = (b) => {
-      const unit = (b.currency === 'AUD' ? (parseFloat(b.amount) || 0) * rate : (parseFloat(b.amount) || 0));
+      const unit = toTwd(parseFloat(b.amount) || 0, b.currency);
       if (b.priceType === 'total') return unit;
       const mult = (b.priceType === undefined) ? (parseFloat(b.people) || 1) : travelers;
       return unit * mult;
@@ -50,14 +92,22 @@ app.modules.expenses = {
     const remaining = budget - total;
     const pCls = pct >= 100 ? 'danger' : pct >= 80 ? 'warning' : '';
     const pColor = pct >= 100 ? '#b91c1c' : pct >= 80 ? '#ea580c' : '#10b981';
-    // 双币显示：把「台币值」同时标注澳币等价
-    const dualTwd = (twd) => `¥${Math.round(twd)} <span class="text-tiny text-slate-500">≈ A$${(twd / rate).toFixed(0)}</span>`;
-    // 双币显示：按原始币种展示，并标注另一币种等价（AUD↔TWD）
+    // 双币展示：当前台币值 + 勾选的非台币币种等价（如 A$ / CN¥）
+    const tailHtml = (twd) => {
+      const others = vis.filter(c => c !== 'TWD');
+      return others.length
+        ? `<span class="text-tiny text-slate-500">≈ ${others.map(c => `${this.symOf(c)}${fromTwd(twd, c).toFixed(0)}`).join(' / ')}</span>`
+        : '';
+    };
+    // 按原始币种展示，并标注其它勾选币种等价
     const dualAmt = (cur, amt) => {
       const v = parseFloat(amt) || 0;
-      return cur === 'AUD'
-        ? `A$${v.toFixed(2)} <span class="text-tiny text-slate-500">≈ 台币 ¥${(v * rate).toFixed(0)}</span>`
-        : `¥${v.toFixed(2)} <span class="text-tiny text-slate-500">≈ A$${(v / rate).toFixed(0)}</span>`;
+      const twd = toTwd(v, cur);
+      const targets = vis.filter(c => c !== cur);
+      const prim = `${this.symOf(cur)}${v.toFixed(2)}`;
+      return targets.length
+        ? `${prim} <span class="text-tiny text-slate-500">≈ ${targets.map(c => `${this.symOf(c)}${fromTwd(twd, c).toFixed(0)}`).join(' / ')}</span>`
+        : prim;
     };
 
     // 按分类汇总（以台币计）
@@ -74,10 +124,14 @@ app.modules.expenses = {
       <div class="card">
         <div class="card-title">
           <span>${app.t('expense.title')}</span>
-          <div class="ml-auto flex gap-2 items-center">
+          <div class="ml-auto flex gap-2 items-center flex-wrap">
             <label class="text-xs text-slate-500 whitespace-nowrap">💱 ${app.t('expense.rateLabel')}</label>
-            <input id="expRate" type="number" min="0" step="0.1" value="${rate}" class="w-20 text-sm border border-slate-300 rounded px-2 py-1" onchange="app.modules.expenses.saveRate(this.value)" title="1 澳币折合多少台币，保存后所有澳币消费按此换算" />
-            <span class="text-xs text-slate-500">${app.t('expense.twd')}</span>
+            <span class="text-xs text-slate-500 whitespace-nowrap">1 澳币 =</span>
+            <input id="expRate" type="number" min="0" step="0.1" value="${rateA}" class="w-16 text-sm border border-slate-300 rounded px-2 py-1" onchange="app.modules.expenses.saveRate(this.value)" title="1 澳币折合多少台币" />
+            <span class="text-xs text-slate-500">台币</span>
+            <span class="text-xs text-slate-500 whitespace-nowrap">1 人民币 =</span>
+            <input id="expCnyRate" type="number" min="0" step="0.1" value="${rateC}" class="w-16 text-sm border border-slate-300 rounded px-2 py-1" onchange="app.modules.expenses.saveCnyRate(this.value)" title="1 人民币折合多少台币" />
+            <span class="text-xs text-slate-500">台币</span>
             <button class="btn btn-primary" onclick="app.modules.expenses.addExp()">${app.t('expense.add')}</button>
             <button class="btn btn-success" onclick="app.modules.expenses.exportXlsx()">${app.t('expense.export')}</button>
           </div>
@@ -86,7 +140,7 @@ app.modules.expenses = {
           当前目的地：<strong class="text-sky-700">${app.destName(d)}</strong>　·　共 <strong>${expenses.length}</strong> 笔消费
         </p>
 
-        <!-- 旅行设置：本次旅行人数 + 出行人（用于「单人/总价」计价与「谁付款」下拉） -->
+        <!-- 旅行设置：本次旅行人数 + 出行人 + 显示币种 -->
         <div class="mb-4 p-4 rounded-lg border border-slate-200 bg-slate-50/70">
           <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
             <div class="flex items-center gap-2">
@@ -105,6 +159,11 @@ app.modules.expenses = {
               <button class="btn btn-ghost btn-sm" onclick="app.modules.expenses.addPerson()">＋ 添加</button>
             </div>
           </div>
+          <div class="flex items-center gap-4 flex-wrap mt-3 pt-3 border-t border-slate-200">
+            <label class="text-sm font-semibold text-slate-700">💱 显示币种</label>
+            ${['TWD', 'AUD', 'CNY'].map(c => `<label class="inline-flex items-center gap-1 text-xs text-slate-600 cursor-pointer"><input type="checkbox" data-cur="${c}" ${vis.includes(c) ? 'checked' : ''} onchange="app.modules.expenses.saveVisibleCurrencies()" /> ${this.labelOf(c)}</label>`).join('')}
+            <span class="text-xs text-slate-400">（取消勾选即从记账/预算的货币下拉中隐藏，已有记录不受影响）</span>
+          </div>
         </div>
 
         <!-- 预算明细（逐项添加，可选项货币） -->
@@ -116,7 +175,7 @@ app.modules.expenses = {
           ${budgets.length === 0 ? `
             <div class="text-sm text-slate-600">
               ${parseFloat(d.budget) > 0
-                ? `当前使用「整体总预算 ¥${(parseFloat(d.budget) || 0).toFixed(0)}（≈ A$${(parseFloat(d.budget) / rate).toFixed(0)}）」，可将其转为逐项预算：<button class="btn btn-ghost btn-sm ml-2" onclick="app.modules.expenses.migrateLegacyBudget()">${app.t('expense.budgetMigrate')}</button>`
+                ? `当前使用「整体总预算 ${this.fmtTwd(parseFloat(d.budget) || 0, d)}」，可将其转为逐项预算：<button class="btn btn-ghost btn-sm ml-2" onclick="app.modules.expenses.migrateLegacyBudget()">${app.t('expense.budgetMigrate')}</button>`
                 : `📝 ${app.t('expense.budgetEmpty')} — ${app.t('expense.budgetNoItem')}`}
             </div>
           ` : `
@@ -127,10 +186,10 @@ app.modules.expenses = {
                   ${budgets.map(b => `
                     <tr>
                       <td>${b.name || '-'}</td>
-                      <td>${b.currency === 'AUD' ? '澳币 (A$)' : '台币 (NT$)'}</td>
+                      <td>${this.labelOf(b.currency)}</td>
                       <td class="font-semibold">${dualAmt(b.currency, b.amount)}</td>
                       <td><span class="badge ${b.priceType === 'total' ? 'badge-other' : 'badge-hotel'}">${b.priceType === 'total' ? '总价' : '单人'}</span></td>
-                      <td class="text-slate-600">¥${bTwdOf(b).toFixed(0)} <span class="text-tiny text-slate-500">≈ A$${(bTwdOf(b) / rate).toFixed(0)}</span></td>
+                      <td class="text-slate-600">¥${bTwdOf(b).toFixed(0)} ${tailHtml(bTwdOf(b))}</td>
                       <td>
                         <button class="btn btn-ghost btn-sm" onclick="app.modules.expenses.editBudget('${b.id}')">✏️</button>
                         <button class="btn btn-danger btn-sm" onclick="app.modules.expenses.removeBudget('${b.id}')">🗑️</button>
@@ -141,7 +200,7 @@ app.modules.expenses = {
                 <tfoot>
                   <tr style="background:#f1f5f9;font-weight:600">
                     <td colspan="4" class="text-right">${app.t('expense.budgetTotal')}（台币 · ${travelers} 人）</td>
-                    <td>¥${budget.toFixed(2)} <span class="text-tiny text-slate-500">≈ A$${(budget / rate).toFixed(0)}　·　每人 ¥${(budget / travelers).toFixed(0)} ≈ A$${(budget / travelers / rate).toFixed(0)}</span></td>
+                    <td>¥${budget.toFixed(2)} ${tailHtml(budget).replace(/^/, '≈ ')}　·　每人 ¥${(budget / travelers).toFixed(0)} ${tailHtml(budget / travelers)}</td>
                     <td></td>
                   </tr>
                 </tfoot>
@@ -154,17 +213,17 @@ app.modules.expenses = {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
           <div class="p-4 bg-gradient-to-br from-sky-50 to-sky-100 rounded-lg border border-sky-200">
             <div class="text-xs text-sky-700 font-semibold">💰 总预算（${travelers} 人）</div>
-            <div class="text-2xl font-bold text-sky-800">¥${budget.toFixed(0)} <span class="text-base font-semibold text-sky-600">≈ A$${(budget / rate).toFixed(0)}</span></div>
-            <div class="text-xs text-sky-600 mt-0.5">每人 ¥${(budget / travelers).toFixed(0)} ≈ A$${(budget / travelers / rate).toFixed(0)}</div>
+            <div class="text-2xl font-bold text-sky-800">¥${budget.toFixed(0)} ${tailHtml(budget)}</div>
+            <div class="text-xs text-sky-600 mt-0.5">每人 ¥${(budget / travelers).toFixed(0)} ${tailHtml(budget / travelers)}</div>
           </div>
           <div class="p-4 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg border border-orange-200">
             <div class="text-xs text-orange-700 font-semibold">📊 已支出（${travelers} 人）</div>
-            <div class="text-2xl font-bold text-orange-800">¥${total.toFixed(0)} <span class="text-base font-semibold text-orange-600">≈ A$${(total / rate).toFixed(0)}</span></div>
-            <div class="text-xs text-orange-600 mt-0.5">每人 ¥${(total / travelers).toFixed(0)} ≈ A$${(total / travelers / rate).toFixed(0)}</div>
+            <div class="text-2xl font-bold text-orange-800">¥${total.toFixed(0)} ${tailHtml(total)}</div>
+            <div class="text-xs text-orange-600 mt-0.5">每人 ¥${(total / travelers).toFixed(0)} ${tailHtml(total / travelers)}</div>
           </div>
           <div class="p-4 rounded-lg border" style="${remaining >= 0 ? 'background:#ecfdf5;border-color:#a7f3d0;' : 'background:#fef2f2;border-color:#fecaca;'}">
             <div class="text-xs font-semibold" style="color:${remaining >= 0 ? '#047857' : '#b91c1c'}">${remaining >= 0 ? '💵 剩余预算' : '⚠️ 超支金额'}</div>
-            <div class="text-2xl font-bold" style="color:${remaining >= 0 ? '#065f46' : '#991b1b'}">¥${Math.abs(remaining).toFixed(0)} <span class="text-base font-semibold" style="color:${remaining >= 0 ? '#047857' : '#b91c1c'}">≈ A$${(Math.abs(remaining) / rate).toFixed(0)}</span></div>
+            <div class="text-2xl font-bold" style="color:${remaining >= 0 ? '#065f46' : '#991b1b'}">¥${Math.abs(remaining).toFixed(0)} ${tailHtml(Math.abs(remaining))}</div>
           </div>
           <div class="p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg border border-indigo-200">
             <div class="text-xs text-indigo-700 font-semibold">📈 预算占用</div>
@@ -176,7 +235,7 @@ app.modules.expenses = {
           <div class="budget-bar-fill ${pCls}" style="width:${Math.min(100, pct)}%"></div>
         </div>
         ${pct >= 80 && pct < 100 ? `<div class="p-3 bg-amber-50 border border-amber-200 rounded mb-3 text-sm">⚠️ <strong>提醒：</strong>预算已使用 ${pct.toFixed(0)}%，请注意控制消费。</div>` : ''}
-        ${pct >= 100 ? `<div class="p-3 bg-red-50 border border-red-200 rounded mb-3 text-sm">🚨 <strong>超支警告：</strong>已超出预算 ¥${(-remaining).toFixed(0)}（≈ A${(-remaining / rate).toFixed(0)}），建议减少非必要消费。</div>` : ''}
+        ${pct >= 100 ? `<div class="p-3 bg-red-50 border border-red-200 rounded mb-3 text-sm">🚨 <strong>超支警告：</strong>${this.fmtTwd(Math.abs(remaining), d)}，建议减少非必要消费。</div>` : ''}
 
         <!-- 分类汇总 -->
         ${expenses.length > 0 ? `
@@ -185,7 +244,7 @@ app.modules.expenses = {
             ${Object.entries(byCat).map(([cat, amt]) => `
               <div class="p-3 rounded-lg border" style="background:${catColors[cat]}15; border-color:${catColors[cat]}40">
                 <div class="text-xs" style="color:${catColors[cat]}">${catLabels[cat] || '📌'} ${cat}</div>
-                <div class="text-lg font-bold" style="color:${catColors[cat]}">¥${amt.toFixed(0)} <span class="text-tiny font-normal" style="color:${catColors[cat]}">≈ A$${(amt / rate).toFixed(0)}</span></div>
+                <div class="text-lg font-bold" style="color:${catColors[cat]}">¥${amt.toFixed(0)} ${tailHtml(amt)}</div>
                 <div class="text-tiny text-slate-500">${((amt/total)*100).toFixed(1)}%</div>
               </div>
             `).join('')}
@@ -208,16 +267,15 @@ app.modules.expenses = {
               </thead>
               <tbody>
                 ${expenses.map(e => {
+                  const cur = e.currency || 'TWD';
                   const amt = parseFloat(e.amount) || 0;
                   const twd = twdOf(e);
-                  const primary = e.currency === 'AUD' ? `A$${amt.toFixed(2)}` : `¥${amt.toFixed(2)}`;
-                  const other = e.currency === 'AUD' ? `≈ ¥${twd.toFixed(0)}` : `≈ A$${(twd / rate).toFixed(0)}`;
                   return `
                   <tr>
                     <td class="text-tiny">${e.date || '-'}</td>
                     <td>${catLabels[e.category] || ''} ${e.category}</td>
                     <td>${e.detail || '-'}${e.merchant ? ` <span class="text-tiny text-slate-500">· ${e.merchant}</span>` : ''}</td>
-                    <td class="font-semibold">${primary}<div class="text-tiny text-slate-500 font-normal mt-0.5">${other}</div></td>
+                    <td class="font-semibold">${dualAmt(cur, amt)}</td>
                     <td><span class="badge ${e.single ? 'badge-shop' : e.priceType === 'total' ? 'badge-other' : 'badge-hotel'}">${e.single ? '仅一人' : e.priceType === 'total' ? '总价' : '单人'}</span></td>
                     <td class="text-tiny">${e.paidBy || '-'}</td>
                     <td class="text-tiny">${e.payment || '-'}</td>
@@ -232,7 +290,7 @@ app.modules.expenses = {
               <tfoot>
                 <tr style="background:#f1f5f9;font-weight:600">
                   <td colspan="3" class="text-right">合计（台币 · ${travelers} 人）</td>
-                  <td>¥${total.toFixed(2)} <span class="text-tiny text-slate-500">≈ A$${(total / rate).toFixed(0)}　·　每人 ¥${(total / travelers).toFixed(0)} ≈ A$${(total / travelers / rate).toFixed(0)}</span></td>
+                  <td>¥${total.toFixed(2)} ${tailHtml(total).replace(/^/, '≈ ')}　·　每人 ¥${(total / travelers).toFixed(0)} ${tailHtml(total / travelers)}</td>
                   <td colspan="4"></td>
                 </tr>
               </tfoot>
@@ -257,10 +315,20 @@ app.modules.expenses = {
     this.openForm(exp);
   },
 
+  // 生成货币下拉选项（仅显示勾选币种；若已有记录用了被隐藏的币种，仍保留该行可选）
+  currencyOptions(existingCur) {
+    const d = app.getActiveDestination();
+    const vis = this.visibleCurrencies(d);
+    const cur = existingCur || vis[0] || 'TWD';
+    const opts = vis.includes(cur) ? vis.slice() : Array.from(new Set([...vis, cur]));
+    return opts.map(c => `<option value="${c}" ${cur === c ? 'selected' : ''}>${this.labelOf(c)}</option>`).join('');
+  },
+
   openForm(existing = null) {
     const e = existing || {};
     const d = app.getActiveDestination();
     const tripPeople = (d && Array.isArray(d.tripPeople) && d.tripPeople.length) ? d.tripPeople : ['我'];
+    const curSel = e.currency || (this.visibleCurrencies(d)[0]) || 'TWD';
     const html = `
       <div class="form-grid">
         <div class="form-field">
@@ -293,8 +361,7 @@ app.modules.expenses = {
         <div class="form-field">
           <label>消费货币 <span class="req">*</span></label>
           <select id="e_currency" onchange="app.modules.expenses.updatePreview()">
-            <option value="TWD" ${e.currency !== 'AUD' ? 'selected' : ''}>台币 (NT$)</option>
-            <option value="AUD" ${e.currency === 'AUD' ? 'selected' : ''}>澳币 (A$)</option>
+            ${this.currencyOptions(e.currency)}
           </select>
         </div>
         <div class="form-field">
@@ -356,18 +423,21 @@ app.modules.expenses = {
     const prev = document.getElementById('e_twd_prev');
     if (!amtEl || !curEl || !prev) return;
     const d = app.getActiveDestination();
-    const rate = parseFloat(d && d.audToTwd) || 21;
+    const rateA = parseFloat(d && d.audToTwd) || 21;
+    const rateC = parseFloat(d && d.cnyToTwd) || 4.5;
     const travelers = Math.max(1, parseFloat(d && d.travelers) || 1);
     const amt = parseFloat(amtEl.value) || 0;
-    const unit = curEl.value === 'AUD' ? amt * rate : amt;
+    const cur = curEl.value;
+    const unit = cur === 'AUD' ? amt * rateA : cur === 'CNY' ? amt * rateC : amt;
     const isTotal = priceEl && priceEl.value === 'total';
     const isSingle = singleEl && singleEl.checked;
+    const rateNote = cur !== 'TWD' ? `（1 ${this.shortName(cur)} = ${cur === 'AUD' ? rateA : rateC} 台币）` : '';
     prev.textContent = amt > 0
       ? (isSingle
-          ? `🙋 仅一人：总额 ≈ 台币 ¥${unit.toFixed(0)}（不乘 ${travelers} 人，≈ A$${(unit / rate).toFixed(0)}）`
+          ? `🙋 仅一人：总额 ≈ 台币 ¥${unit.toFixed(0)}（不乘 ${travelers} 人${rateNote}）`
           : isTotal
             ? `💱 总价 ≈ 台币 ¥${unit.toFixed(0)}（已含 ${travelers} 人，每人 ≈ ¥${(unit / travelers).toFixed(0)}）`
-            : `💱 单人 ≈ 台币 ¥${unit.toFixed(0)}　·　${travelers} 人合计 ≈ 台币 ¥${(unit * travelers).toFixed(0)}（1 澳币 = ${rate} 台币）`)
+            : `💱 单人 ≈ 台币 ¥${unit.toFixed(0)}　·　${travelers} 人合计 ≈ 台币 ¥${(unit * travelers).toFixed(0)}${rateNote}`)
       : '';
   },
 
@@ -414,6 +484,28 @@ app.modules.expenses = {
     const r = parseFloat(val);
     if (!r || r <= 0) return app.toast('汇率需为正数', 'warning');
     d.audToTwd = r;
+    app.saveState();
+    this.render();
+  },
+
+  saveCnyRate(val) {
+    const d = app.getActiveDestination();
+    if (!d) return;
+    const r = parseFloat(val);
+    if (!r || r <= 0) return app.toast('汇率需为正数', 'warning');
+    d.cnyToTwd = r;
+    app.saveState();
+    this.render();
+  },
+
+  saveVisibleCurrencies() {
+    const d = app.getActiveDestination();
+    if (!d) return;
+    const enabled = ['TWD', 'AUD', 'CNY'].filter(c => {
+      const el = document.querySelector(`input[data-cur="${c}"]`);
+      return el ? el.checked : true;
+    });
+    d.enabledCurrencies = enabled.length ? enabled : ['TWD'];
     app.saveState();
     this.render();
   },
@@ -488,8 +580,7 @@ app.modules.expenses = {
         <div class="form-field">
           <label>货币 <span class="req">*</span></label>
           <select id="b_currency" onchange="app.modules.expenses.updateBudgetPreview()">
-            <option value="TWD" ${b.currency !== 'AUD' ? 'selected' : ''}>台币 (NT$)</option>
-            <option value="AUD" ${b.currency === 'AUD' ? 'selected' : ''}>澳币 (A$)</option>
+            ${this.currencyOptions(b.currency)}
           </select>
         </div>
         <div class="form-field">
@@ -520,15 +611,18 @@ app.modules.expenses = {
     const prev = document.getElementById('b_twd_prev');
     if (!amtEl || !curEl || !prev) return;
     const d = app.getActiveDestination();
-    const rate = parseFloat(d && d.audToTwd) || 21;
+    const rateA = parseFloat(d && d.audToTwd) || 21;
+    const rateC = parseFloat(d && d.cnyToTwd) || 4.5;
     const travelers = Math.max(1, parseFloat(d && d.travelers) || 1);
     const amt = parseFloat(amtEl.value) || 0;
-    const unit = curEl.value === 'AUD' ? amt * rate : amt;
+    const cur = curEl.value;
+    const unit = cur === 'AUD' ? amt * rateA : cur === 'CNY' ? amt * rateC : amt;
     const isTotal = priceEl && priceEl.value === 'total';
+    const rateNote = cur !== 'TWD' ? `（1 ${this.shortName(cur)} = ${cur === 'AUD' ? rateA : rateC} 台币）` : '';
     prev.textContent = amt > 0
       ? (isTotal
           ? `💱 总价 ≈ 台币 ¥${unit.toFixed(0)}（已含 ${travelers} 人，每人 ≈ ¥${(unit / travelers).toFixed(0)}）`
-          : `💱 单人 ≈ 台币 ¥${unit.toFixed(0)}　·　${travelers} 人合计 ≈ 台币 ¥${(unit * travelers).toFixed(0)}（1 澳币 = ${rate} 台币）`)
+          : `💱 单人 ≈ 台币 ¥${unit.toFixed(0)}　·　${travelers} 人合计 ≈ 台币 ¥${(unit * travelers).toFixed(0)}${rateNote}`)
       : '';
   },
 
@@ -587,13 +681,12 @@ app.modules.expenses = {
   checkBudget() {
     const d = app.getActiveDestination();
     if (!d) return;
-    const rate = parseFloat(d.audToTwd) || 21;
     const total = app.getExpensesTotal(d.id);
     const budget = app.getBudgetTotal(d.id);
     if (budget > 0) {
       const pct = (total / budget) * 100;
       if (pct >= 100) {
-        app.toast(`🚨 预算已超！当前已花 ¥${total.toFixed(0)}（≈ A$${(total / rate).toFixed(0)}），超出预算 ¥${(total - budget).toFixed(0)}（≈ A${((total - budget) / rate).toFixed(0)}）`, 'error', 6000);
+        app.toast(`🚨 预算已超！当前已花 ${this.fmtTwd(total, d)}，超出预算 ${this.fmtTwd(total - budget, d)}`, 'error', 6000);
       } else if (pct >= 80) {
         app.toast(`⚠️ 预算使用已达 ${pct.toFixed(0)}%，请注意控制`, 'warning', 5000);
       }
@@ -606,10 +699,12 @@ app.modules.expenses = {
     const expenses = app.state[d.id]?.expenses || [];
     if (expenses.length === 0) return app.toast('暂无消费记录', 'warning');
 
-    const rate = parseFloat(d.audToTwd) || 21;
+    const rateA = parseFloat(d.audToTwd) || 21;
+    const rateC = parseFloat(d.cnyToTwd) || 4.5;
     const travelers = Math.max(1, parseFloat(d.travelers) || 1);
+    const toTwd = (amt, cur) => cur === 'AUD' ? amt * rateA : cur === 'CNY' ? amt * rateC : amt;
     const twdOf = (e) => {
-      const unit = (e.currency === 'AUD' ? (parseFloat(e.amount) || 0) * rate : (parseFloat(e.amount) || 0));
+      const unit = toTwd(parseFloat(e.amount) || 0, e.currency);
       if (e.single) return unit;
       if (e.priceType === 'total') return unit;
       const mult = (e.priceType === undefined) ? (parseFloat(e.people) || 1) : travelers;
@@ -617,7 +712,7 @@ app.modules.expenses = {
     };
     const rows = expenses.map(e => ({
       日期: e.date, 分类: e.category, 详情: e.detail,
-      货币: e.currency === 'AUD' ? '澳币' : '台币', 原金额: e.amount, 计价: e.single ? '仅我' : e.priceType === 'total' ? '总价' : '单人',
+      货币: this.shortName(e.currency), 原金额: e.amount, 计价: e.single ? '仅我' : e.priceType === 'total' ? '总价' : '单人',
       台币: Math.round(twdOf(e)), 商家: e.merchant || '', 付款人: e.paidBy || '', 支付方式: e.payment
     }));
     const totalTwd = expenses.reduce((s, e) => s + twdOf(e), 0);
