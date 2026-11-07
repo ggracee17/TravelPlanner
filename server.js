@@ -41,7 +41,7 @@ fs.mkdirSync(BACKUP_DIR, { recursive: true });
 // 访问密码（环境变量优先，缺省给一个弱默认值并告警）——仅用于「旧版共享看板」迁移后的 owner 账号初始密码。
 const BOARD_PASSWORD = process.env.BOARD_PASSWORD || 'travel2026';
 if (!process.env.BOARD_PASSWORD) {
-  console.warn('[安全] 未设置环境变量 BOARD_PASSWORD，owner 初始账号将使用默认弱密码 "travel2026"，请尽快修改！');
+  console.warn('[安全] 未设置环境变量 BOARD_PASSWORD：仅当触发「旧版共享看板迁移」时才会自动建 owner 账号并使用默认弱密码 "travel2026"。本机自用可忽略；一旦部署到公网，请务必设置强密码（环境变量 BOARD_PASSWORD）。');
 }
 
 // 持久化：后端模式下数据存到本地文件（DATA_DIR，默认 ./data）。注意：仅付费实例挂了持久磁盘后，
@@ -561,10 +561,12 @@ async function boot() {
     if (backendOn) {
       if (ds.mounted) {
         console.log(`   ✅ 永久存储：写入 ${BOARDS_DIR}/<user>.json（已挂载持久磁盘 ${DATA_DIR}，跨部署/重启保留）`);
-      } else {
+      } else if (process.env.RENDER) {
         console.log(`   ⚠️⚠️ 持久化风险：后端已启用，但 ${DATA_DIR} 不是「持久磁盘挂载点」(checkStorage.mounted=false)！`);
-        console.log(`      当前写入 ${BOARDS_DIR} 实际位于临时文件系统，每次「重新部署/重启」都会清空 → 数据会丢失。`);
+        console.log(`      当前写入 ${BOARDS_DIR} 实际位于 Render 临时文件系统，每次「重新部署/重启」都会清空 → 数据会丢失。`);
         console.log(`      请在 Render 控制台确认 travel-data 磁盘已「挂载到本服务」且挂载路径为 /data，然后重新部署。`);
+      } else {
+        console.log(`   💡 本地存储：数据写入项目目录下的 ${BOARDS_DIR}/<user>.json（就在你电脑的硬盘上，关机/重启都不会丢；只有删除该文件夹或重装系统才会丢失）。需要备份时，直接复制整个 data/ 文件夹即可。`);
       }
     } else {
       console.log(`   本地存储：后端未启用，前端使用浏览器 localStorage（不跨设备、清缓存即丢）`);
