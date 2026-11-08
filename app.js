@@ -754,7 +754,8 @@ const app = {
         return s + unit * mult;
       }, 0);
     }
-    return parseFloat(d.budget) || 0;
+    // 无逐项预算时，总预算按预算明细计算 → 为空则为 0（不再回落到旧的「整体总预算」字段）
+    return 0;
   },
 
   /* ====== 工具：UUID ====== */

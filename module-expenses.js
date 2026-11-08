@@ -79,14 +79,8 @@ app.modules.expenses = {
     };
     const total = expenses.reduce((s, e) => s + twdOf(e), 0);
 
-    // 逐项预算：每个 budget 项 { id, name, amount, currency, priceType }，汇总成台币
+    // 逐项预算：每个 budget 项 { id, name, amount, currency, priceType }
     const budgets = (app.state[d.id]?.budgets || []).slice();
-    const bTwdOf = (b) => {
-      const unit = toTwd(parseFloat(b.amount) || 0, b.currency);
-      if (b.priceType === 'total') return unit;
-      const mult = (b.priceType === undefined) ? (parseFloat(b.people) || 1) : travelers;
-      return unit * mult;
-    };
     const budget = app.getBudgetTotal(d.id);
     const pct = budget > 0 ? (total / budget) * 100 : 0;
     const remaining = budget - total;
@@ -175,21 +169,20 @@ app.modules.expenses = {
           ${budgets.length === 0 ? `
             <div class="text-sm text-slate-600">
               ${parseFloat(d.budget) > 0
-                ? `当前使用「整体总预算 ${this.fmtTwd(parseFloat(d.budget) || 0, d)}」，可将其转为逐项预算：<button class="btn btn-ghost btn-sm ml-2" onclick="app.modules.expenses.migrateLegacyBudget()">${app.t('expense.budgetMigrate')}</button>`
+                ? `检测到「整体总预算 ¥${(parseFloat(d.budget) || 0).toFixed(0)}」，可将其转为逐项预算：<button class="btn btn-ghost btn-sm ml-2" onclick="app.modules.expenses.migrateLegacyBudget()">${app.t('expense.budgetMigrate')}</button>`
                 : `📝 ${app.t('expense.budgetEmpty')} — ${app.t('expense.budgetNoItem')}`}
             </div>
           ` : `
             <div class="overflow-x-auto">
               <table class="data-table">
-                <thead><tr><th>预算项</th><th>货币</th><th>金额</th><th>计价</th><th>折合台币</th><th>操作</th></tr></thead>
+                <thead><tr><th>预算项</th><th>货币</th><th>金额</th><th>计价</th><th>操作</th></tr></thead>
                 <tbody>
                   ${budgets.map(b => `
                     <tr>
                       <td>${b.name || '-'}</td>
                       <td>${this.labelOf(b.currency)}</td>
-                      <td class="font-semibold">${dualAmt(b.currency, b.amount)}</td>
+                      <td class="font-semibold">${this.symOf(b.currency)}${parseFloat(b.amount || 0).toFixed(2)}</td>
                       <td><span class="badge ${b.priceType === 'total' ? 'badge-other' : 'badge-hotel'}">${b.priceType === 'total' ? '总价' : '单人'}</span></td>
-                      <td class="text-slate-600">¥${bTwdOf(b).toFixed(0)} ${tailHtml(bTwdOf(b))}</td>
                       <td>
                         <button class="btn btn-ghost btn-sm" onclick="app.modules.expenses.editBudget('${b.id}')">✏️</button>
                         <button class="btn btn-danger btn-sm" onclick="app.modules.expenses.removeBudget('${b.id}')">🗑️</button>
@@ -197,13 +190,6 @@ app.modules.expenses = {
                     </tr>
                   `).join('')}
                 </tbody>
-                <tfoot>
-                  <tr style="background:#f1f5f9;font-weight:600">
-                    <td colspan="4" class="text-right">${app.t('expense.budgetTotal')}（台币 · ${travelers} 人）</td>
-                    <td>¥${budget.toFixed(2)} ${tailHtml(budget).replace(/^/, '≈ ')}　·　每人 ¥${(budget / travelers).toFixed(0)} ${tailHtml(budget / travelers)}</td>
-                    <td></td>
-                  </tr>
-                </tfoot>
               </table>
             </div>
           `}

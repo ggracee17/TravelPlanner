@@ -1,7 +1,7 @@
 /*
  * 验证逐项预算逻辑 getBudgetTotal：
- *   1) 有预算项时：按货币折算成台币求和（AUD × audToTwd，TWD 原值）；
- *   2) 无预算项时：回落到整体预算 d.budget；
+ *   1) 有预算项时：按货币折算成台币求和（AUD × audToTwd，CNY × cnyToTwd，TWD 原值）；
+ *   2) 无预算项时：返回 0（总预算仅按预算明细计算，不再回落整体预算 d.budget）；
  *   3) 目的地缺失时返回 0。
  * 用 vm 加载真实 app.js，桩掉 DOM / 浏览器 API。
  */
@@ -45,8 +45,8 @@ console.log('\n[测试C] 逐项预算 getBudgetTotal');
     d1: { itinerary: [], expenses: [], media: [] }
   };
 
-  // 1) 无预算项 → 回落 d.budget
-  assert(Math.abs(app.getBudgetTotal('d1') - 10000) < 1e-6, '无逐项预算时回落整体预算 ¥10000');
+  // 1) 无预算项 → 总预算按预算明细计算，为空即 0（不再回落 d.budget）
+  assert(app.getBudgetTotal('d1') === 0, '无逐项预算时总预算为 0（仅按预算明细计算）');
 
   // 2) 有逐项预算：TWD 5000 + AUD 100(×21=2100) = 7100，d.budget 被忽略
   app.state.d1.budgets = [

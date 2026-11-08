@@ -47,12 +47,13 @@ function assert(cond, msg) { if (cond) { passed++; console.log('  PASS: ' + msg)
 console.log('\n[预算「提醒」条百分比必须插值，不能显示原始模板字符串]');
 {
   const { app, sec } = makeClient();
-  // 预算 10000；花费 8500 TWD（travelers=1，无 priceType → 不翻倍）→ pct = 85% ∈ [80,100)，触发琥珀色提醒
+  // 预算明细合计 10000（TWD）；花费 8500 TWD（travelers=1，无 priceType → 不翻倍）→ pct = 85% ∈ [80,100)，触发琥珀色提醒
   app.state = {
     destinations: [{ id: 'd1', name: 'Sydney', budget: 10000, audToTwd: 21, travelers: 1 }],
     activeDestinationId: 'd1',
     d1: {
       itinerary: [], media: [],
+      budgets: [{ id: 'bg1', name: '总预算', amount: 10000, currency: 'TWD' }],
       expenses: [{ id: 'e1', name: '机票', category: '交通', currency: 'TWD', amount: 8500, date: '2026-01-01' }]
     }
   };
@@ -70,6 +71,7 @@ console.log('\n[对照：pct < 80% 时不出现该提醒条]');
     activeDestinationId: 'd1',
     d1: {
       itinerary: [], media: [],
+      budgets: [{ id: 'bg1', name: '总预算', amount: 10000, currency: 'TWD' }],
       expenses: [{ id: 'e1', name: '机票', category: '交通', currency: 'TWD', amount: 5000, date: '2026-01-01' }]
     }
   };
